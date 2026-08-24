@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export async function GET() {
-  const { data, error } = await supabase
+  const db = getSupabase()
+  const { data, error } = await db
     .from('current_app_state')
     .select('*')
     .eq('id', 1)
@@ -14,7 +15,8 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
-  const { data, error } = await supabase
+  const db = getSupabase()
+  const { data, error } = await db
     .from('current_app_state')
     .upsert({ id: 1, updated_at: new Date().toISOString(), ...body })
     .select()

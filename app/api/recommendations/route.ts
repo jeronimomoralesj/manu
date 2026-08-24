@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import { runRecommendationAlgorithm } from '@/lib/algorithm'
 import { Song, DailyLog } from '@/types'
 
@@ -7,9 +7,10 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const vibeOverride = searchParams.get('vibe') ? Number(searchParams.get('vibe')) : undefined
 
+  const db = getSupabase()
   const [songsRes, logRes] = await Promise.all([
-    supabase.from('music_library').select('*'),
-    supabase
+    db.from('music_library').select('*'),
+    db
       .from('daily_logs')
       .select('*')
       .order('created_at', { ascending: false })

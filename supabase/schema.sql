@@ -32,17 +32,9 @@ CREATE TABLE IF NOT EXISTS current_app_state (
   note_prefix TEXT NOT NULL DEFAULT 'Just for you —'
 );
 
--- Enable Row Level Security (public read, no write without auth)
+-- RLS: deny all direct client access — the service role key (used server-side only)
+-- bypasses RLS, so no policies are needed for our app.
+-- This ensures nothing leaks even if the anon key were ever exposed.
 ALTER TABLE music_library ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE current_app_state ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public read music_library" ON music_library FOR SELECT USING (true);
-CREATE POLICY "Public read daily_logs" ON daily_logs FOR SELECT USING (true);
-CREATE POLICY "Public read app_state" ON current_app_state FOR SELECT USING (true);
-
--- Allow anon insert for daily_logs (for Telegram bot integration later)
-CREATE POLICY "Anon insert daily_logs" ON daily_logs FOR INSERT WITH CHECK (true);
-
--- Allow upsert on app_state
-CREATE POLICY "Anon upsert app_state" ON current_app_state FOR ALL USING (true);

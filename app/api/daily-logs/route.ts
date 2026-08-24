@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export async function GET() {
-  const { data, error } = await supabase
+  const db = getSupabase()
+  const { data, error } = await db
     .from('daily_logs')
     .select('*')
     .order('created_at', { ascending: false })
@@ -14,7 +15,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { data, error } = await supabase
+  const db = getSupabase()
+  const { data, error } = await db
     .from('daily_logs')
     .insert([{
       saw_each_other: body.saw_each_other ?? false,
