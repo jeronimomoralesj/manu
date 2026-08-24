@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getServerClient } from "@/lib/supabase"
 
 const SEED_SONGS = [
   { title: 'Fall in Love Alone', artist: 'Stacey Ryan', spotify_uri: 'spotify:track:2Fxmhks0LivefKFGTNzmjo', cover_url: 'https://i.scdn.co/image/ab67616d0000b273e8e28219724c2423afa4d320', mood_mode: 'playful_connection', valence: 0.8, energy: 0.6, acousticness: 0.4 },
@@ -15,7 +15,7 @@ const SEED_SONGS = [
 ]
 
 export async function POST() {
-  const db = getSupabase()
+  const db = getServerClient()
   const { error } = await db.from('music_library').insert(SEED_SONGS)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

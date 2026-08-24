@@ -1,13 +1,17 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
-// Server-only module — all Supabase access goes through /api routes on the client
-let _client: SupabaseClient | null = null
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
-export function getSupabase(): SupabaseClient {
-  if (_client) return _client
-  const url = process.env.SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
-  _client = createClient(url, key, { auth: { persistSession: false } })
-  return _client
+// Browser-safe client — uses publishable key, respects RLS
+export function getBrowserClient() {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  if (!url || !key) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
+  return createClient(url, key)
+}
+
+// Server-only client — uses secret key, bypasses RLS
+export function getServerClient() {
+  const key = process.env.SUPABASE_SECRET_KEY
+  if (!url || !key) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY')
+  return createClient(url, key, { auth: { persistSession: false } })
 }

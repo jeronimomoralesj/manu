@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getServerClient } from "@/lib/supabase"
 
 export async function GET() {
-  const db = getSupabase()
+  const db = getServerClient()
   const { data, error } = await db
     .from('daily_logs')
     .select('*')
@@ -15,7 +15,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const db = getSupabase()
+  const db = getServerClient()
   const { data, error } = await db
     .from('daily_logs')
     .insert([{

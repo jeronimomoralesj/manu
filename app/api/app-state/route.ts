@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getServerClient } from "@/lib/supabase"
 
 export async function GET() {
-  const db = getSupabase()
+  const db = getServerClient()
   const { data, error } = await db
     .from('current_app_state')
     .select('*')
@@ -15,7 +15,7 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json()
-  const db = getSupabase()
+  const db = getServerClient()
   const { data, error } = await db
     .from('current_app_state')
     .upsert({ id: 1, updated_at: new Date().toISOString(), ...body })
