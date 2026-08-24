@@ -1,69 +1,137 @@
-import Image from "next/image";
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import RadioPlayer from '@/components/RadioPlayer'
+import Dashboard from '@/components/Dashboard'
+import AudioPlayerBar from '@/components/AudioPlayerBar'
+import { RecommendationResult, Song } from '@/types'
+
+const FALLBACK: RecommendationResult = {
+  songs: [],
+  mood: 'cozy_comfort',
+  frequency: 89.2,
+  message: 'Loading your personalized station...',
+  notePrefix: 'Just for you —',
+}
 
 export default function Home() {
+  const [data, setData] = useState<RecommendationResult>(FALLBACK)
+  const [vibeScore, setVibeScore] = useState(3)
+  const [activeSong, setActiveSong] = useState<Song | null>(null)
+  const [songIndex, setSongIndex] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const fetchRecommendations = useCallback(async (vibe?: number) => {
+    const url = vibe ? `/api/recommendations?vibe=${vibe}` : '/api/recommendations'
+    const res = await fetch(url)
+    if (!res.ok) return
+    const json: RecommendationResult = await res.json()
+    setData(json)
+    if (json.songs.length > 0 && !activeSong) {
+      setActiveSong(json.songs[0])
+    }
+    setLoading(false)
+  }, [activeSong])
+
+  useEffect(() => {
+    fetchRecommendations()
+  }, [])
+
+  const handleVibeChange = (v: number) => {
+    setVibeScore(v)
+    fetchRecommendations(v)
+  }
+
+  const handlePlay = (song: Song) => {
+    setActiveSong(song)
+    const idx = data.songs.findIndex((s) => s.id === song.id)
+    if (idx !== -1) setSongIndex(idx)
+  }
+
+  const handleNext = () => {
+    if (!data.songs.length) return
+    const next = (songIndex + 1) % data.songs.length
+    setSongIndex(next)
+    setActiveSong(data.songs[next])
+  }
+
+  const handlePrev = () => {
+    if (!data.songs.length) return
+    const prev = (songIndex - 1 + data.songs.length) % data.songs.length
+    setSongIndex(prev)
+    setActiveSong(data.songs[prev])
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="flex h-screen overflow-hidden" style={{ background: '#F4F5F7', fontFamily: "'Inter', sans-serif" }}>
+      {/* Left sidebar nav */}
+      <div
+        className="w-16 h-full flex-shrink-0 flex flex-col items-center py-6 gap-5"
+        style={{
+          background: '#fff',
+          boxShadow: '2px 0 12px rgba(0,0,0,0.06)',
+        }}
+      >
+        <div
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm"
+          style={{ background: '#FF5722' }}
+        >
+          ♪
+        </div>
+        {['🏠', '🎵', '🎼', '❤️', '📊', '⚙️'].map((icon, i) => (
+          <button
+            key={i}
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
+          >
+            {icon}
+          </button>
+        ))}
+        <div className="mt-auto">
+          <button className="w-10 h-10 rounded-xl flex items-center justify-center text-lg hover:bg-gray-100 transition-colors">
+            ☆
+          </button>
+        </div>
+      </div>
+
+      {/* Radio player */}
+      <div className="w-80 flex-shrink-0 p-4 h-full">
+        <RadioPlayer
+          frequency={data.frequency}
+          mood={data.mood}
+          nowPlaying={activeSong?.title ?? '...'}
+          vibeScore={vibeScore}
+          onVibeChange={handleVibeChange}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+      </div>
+
+      {/* Main dashboard */}
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div
+              className="w-16 h-16 rounded-full border-4 border-t-[#FF5722] animate-spin mx-auto mb-4"
+              style={{ borderColor: '#e5e7eb', borderTopColor: '#FF5722' }}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <p className="text-gray-500 text-sm">Tuning your frequency...</p>
+          </div>
         </div>
-      </main>
-    </div>
-  );
+      ) : (
+        <Dashboard
+          songs={data.songs}
+          mood={data.mood}
+          message={data.message}
+          notePrefix={data.notePrefix}
+          photoUrl={null}
+          activeSong={activeSong}
+          onPlay={handlePlay}
+        />
+      )}
+
+      {/* Fixed audio player */}
+      <AudioPlayerBar
+        song={activeSong}
+        onNext={handleNext}
+        onPrev={handlePrev}
+      />
+    </main>
+  )
 }
