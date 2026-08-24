@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import RadioPlayer from '@/components/RadioPlayer'
 import Dashboard from '@/components/Dashboard'
 import AudioPlayerBar from '@/components/AudioPlayerBar'
@@ -9,16 +10,18 @@ const FALLBACK: RecommendationResult = {
   songs: [],
   mood: 'cozy_comfort',
   frequency: 89.2,
-  message: 'Loading your personalized station...',
-  notePrefix: 'Just for you —',
+  message: 'Cargando tu estación personalizada...',
+  notePrefix: 'Solo para ti —',
 }
 
-export default function Home() {
+function HomeInner() {
+  const searchParams = useSearchParams()
   const [data, setData] = useState<RecommendationResult>(FALLBACK)
   const [vibeScore, setVibeScore] = useState(3)
   const [activeSong, setActiveSong] = useState<Song | null>(null)
   const [songIndex, setSongIndex] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [showRadio, setShowRadio] = useState(false)
 
   const fetchRecommendations = useCallback(async (vibe?: number) => {
     const url = vibe ? `/api/recommendations?vibe=${vibe}` : '/api/recommendations'
@@ -26,14 +29,21 @@ export default function Home() {
     if (!res.ok) return
     const json: RecommendationResult = await res.json()
     setData(json)
-    if (json.songs.length > 0 && !activeSong) {
-      setActiveSong(json.songs[0])
-    }
     setLoading(false)
-  }, [activeSong])
+    return json
+  }, [])
 
   useEffect(() => {
-    fetchRecommendations()
+    fetchRecommendations().then((json) => {
+      if (!json) return
+      const playId = searchParams.get('play')
+      if (playId) {
+        const target = json.songs.find(s => s.id === playId)
+        if (target) setActiveSong(target)
+      } else if (json.songs.length > 0) {
+        setActiveSong(json.songs[0])
+      }
+    })
   }, [])
 
   const handleVibeChange = (v: number) => {
@@ -43,7 +53,7 @@ export default function Home() {
 
   const handlePlay = (song: Song) => {
     setActiveSong(song)
-    const idx = data.songs.findIndex((s) => s.id === song.id)
+    const idx = data.songs.findIndex(s => s.id === song.id)
     if (idx !== -1) setSongIndex(idx)
   }
 
@@ -62,56 +72,48 @@ export default function Home() {
   }
 
   return (
-    <main className="flex h-screen overflow-hidden" style={{ background: '#F4F5F7', fontFamily: "'Inter', sans-serif" }}>
-      {/* Left sidebar nav */}
+    <main
+      className="flex h-screen overflow-hidden relative"
+      style={{ background: '#F4F5F7', fontFamily: "'Inter', sans-serif" }}
+    >
+      {/* Radio panel — hidden on mobile unless toggled */}
       <div
-        className="w-16 h-full flex-shrink-0 flex flex-col items-center py-6 gap-5"
-        style={{
-          background: '#fff',
-          boxShadow: '2px 0 12px rgba(0,0,0,0.06)',
-        }}
+        className={`
+          flex-shrink-0 h-full p-3 md:p-4
+          transition-all duration-300
+          ${showRadio ? 'w-72 md:w-80' : 'w-0 md:w-80'}
+          overflow-hidden
+        `}
       >
-        <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm"
-          style={{ background: '#FF5722' }}
-        >
-          ♪
-        </div>
-        {['🏠', '🎵', '🎼', '❤️', '📊', '⚙️'].map((icon, i) => (
-          <button
-            key={i}
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-lg hover:bg-gray-100 transition-colors"
-          >
-            {icon}
-          </button>
-        ))}
-        <div className="mt-auto">
-          <button className="w-10 h-10 rounded-xl flex items-center justify-center text-lg hover:bg-gray-100 transition-colors">
-            ☆
-          </button>
+        <div className="w-64 md:w-full h-full">
+          <RadioPlayer
+            frequency={data.frequency}
+            mood={data.mood}
+            nowPlaying={activeSong?.title ?? '...'}
+            vibeScore={vibeScore}
+            onVibeChange={handleVibeChange}
+          />
         </div>
       </div>
 
-      {/* Radio player */}
-      <div className="w-80 flex-shrink-0 p-4 h-full">
-        <RadioPlayer
-          frequency={data.frequency}
-          mood={data.mood}
-          nowPlaying={activeSong?.title ?? '...'}
-          vibeScore={vibeScore}
-          onVibeChange={handleVibeChange}
-        />
-      </div>
+      {/* Mobile radio toggle */}
+      <button
+        className="md:hidden absolute top-4 left-4 z-30 w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-lg"
+        style={{ background: '#FF5722' }}
+        onClick={() => setShowRadio(s => !s)}
+      >
+        <span className="text-sm">♪</span>
+      </button>
 
       {/* Main dashboard */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div
-              className="w-16 h-16 rounded-full border-4 border-t-[#FF5722] animate-spin mx-auto mb-4"
+              className="w-14 h-14 rounded-full border-4 animate-spin mx-auto mb-3"
               style={{ borderColor: '#e5e7eb', borderTopColor: '#FF5722' }}
             />
-            <p className="text-gray-500 text-sm">Tuning your frequency...</p>
+            <p className="text-gray-400 text-sm">Sintonizando tu frecuencia...</p>
           </div>
         </div>
       ) : (
@@ -126,12 +128,15 @@ export default function Home() {
         />
       )}
 
-      {/* Fixed audio player */}
-      <AudioPlayerBar
-        song={activeSong}
-        onNext={handleNext}
-        onPrev={handlePrev}
-      />
+      <AudioPlayerBar song={activeSong} onNext={handleNext} onPrev={handlePrev} />
     </main>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
   )
 }

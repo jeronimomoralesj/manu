@@ -11,6 +11,7 @@ export interface Song {
   energy: number
   acousticness: number
   personal_note: string | null
+  photo_base64: string | null
 }
 
 export interface DailyLog {

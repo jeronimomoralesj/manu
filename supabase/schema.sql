@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS music_library (
   valence FLOAT DEFAULT 0.5,
   energy FLOAT DEFAULT 0.5,
   acousticness FLOAT DEFAULT 0.5,
-  personal_note TEXT
+  personal_note TEXT,
+  photo_base64 TEXT
 );
 
 -- 2. Daily Logs

@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       energy: Number(body.energy),
       acousticness: Number(body.acousticness),
       personal_note: body.personal_note || null,
+      photo_base64: body.photo_base64 || null,
     }])
     .select()
     .single()
