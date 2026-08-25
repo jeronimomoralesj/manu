@@ -40,3 +40,52 @@ export interface RecommendationResult {
   message: string
   notePrefix: string
 }
+
+export interface Gamification {
+  id: number
+  total_points: number
+  unlocked_level: number
+  selected_avatar: string
+  unlocked_avatars: string[]
+}
+
+export interface MemoryVault {
+  id: string
+  title: string
+  date_happened: string | null
+  required_points: number
+  is_unlocked: boolean
+  description: string
+  photo_urls: string[] | null
+  spotify_uri: string | null
+  created_at: string
+}
+
+export interface TriviaQuestion {
+  id: string
+  question: string
+  options: string[]
+  correct_option_index: number
+  points_reward: number
+  is_answered: boolean
+}
+
+export interface SecretDate {
+  id: string
+  required_score: number
+  ticket_number: string
+  title: string
+  is_claimed: boolean
+}
+
+export interface MapLocation {
+  id: string
+  city_name: string
+  latitude: number
+  longitude: number
+  visit_date: string
+  trip_title: string
+  trip_story: string | null
+  photo_urls: string[] | null
+  trip_song_spotify_uri: string | null
+}

@@ -163,8 +163,8 @@ export default function AdminPage() {
             <p className="text-xs text-gray-400">Biblioteca de canciones</p>
           </div>
           <div className="flex gap-2">
-            <a href="/" className="px-3 py-2 rounded-xl text-sm font-semibold text-gray-600 bg-white border border-gray-200">
-              ← Ver app
+            <a href="/" className="px-3 py-2 rounded-xl text-sm font-semibold text-gray-600 bg-white border border-gray-200 flex items-center gap-1">
+              ← App
             </a>
             <button
               onClick={handleSeed}

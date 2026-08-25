@@ -32,24 +32,26 @@ const MOOD_PLAYLIST_TITLE: Record<MoodMode, string> = {
   wind_down: 'Para Descansar Esta Noche 🌙',
 }
 
-const MOOD_ARTIST_LISTS: Record<MoodMode, string[]> = {
-  playful_connection: ['Bad Bunny', 'Harry Styles', 'Doja Cat', 'Sabrina'],
-  cozy_comfort: ['Adele', 'Lorde', 'Bon Iver', 'Phoebe'],
-  missing_you: ['Alex Turner', 'Lana', 'Nick Drake', 'Sufjan'],
-  wind_down: ['Norah Jones', 'Corinne', 'Sade', 'Air'],
-}
-
-const AVATAR_COLORS = ['#FFB347', '#FF7AA2', '#7EC8E3', '#B5EAD7', '#C7CEEA']
+const AVATAR_COLORS = ['#FFB347', '#FF7AA2', '#7EC8E3', '#B5EAD7', '#C7CEEA', '#DDA0DD', '#98FB98']
 const ALL_MOODS: MoodMode[] = ['cozy_comfort', 'playful_connection', 'missing_you', 'wind_down']
+
+interface Artist { name: string; count: number; cover: string | null }
 
 export default function Dashboard({ allSongs, suggestedMood, message, notePrefix, photoUrl, activeSong, onPlay }: Props) {
   const router = useRouter()
   const [selectedMood, setSelectedMood] = useState<MoodMode>(suggestedMood)
+  const [artists, setArtists] = useState<Artist[]>([])
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Song[]>([])
   const [showResults, setShowResults] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    fetch('/api/artists').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setArtists(data)
+    })
+  }, [])
 
   // Keep selectedMood in sync when algorithm changes suggestedMood
   useEffect(() => { setSelectedMood(suggestedMood) }, [suggestedMood])
@@ -58,7 +60,6 @@ export default function Dashboard({ allSongs, suggestedMood, message, notePrefix
   const moodSongs = allSongs.filter(s => s.mood_mode === selectedMood)
   const vinylSongs = moodSongs.slice(0, 5)
   const topAlbums = moodSongs.slice(0, 3)
-  const artists = MOOD_ARTIST_LISTS[selectedMood]
 
   // Debounced search across all songs
   useEffect(() => {
@@ -223,18 +224,24 @@ export default function Dashboard({ allSongs, suggestedMood, message, notePrefix
             style={{ background: '#fff', boxShadow: '4px 4px 16px rgba(0,0,0,0.06)' }}
           >
             <h3 className="font-bold text-gray-800 mb-3">Artistas Favoritos</h3>
-            <div className="flex gap-3 justify-around">
-              {artists.map((name, i) => (
-                <div key={name} className="flex flex-col items-center gap-1">
-                  <div
-                    className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md"
-                    style={{ background: `linear-gradient(135deg, ${AVATAR_COLORS[i]}, ${AVATAR_COLORS[(i + 2) % 5]})` }}
+            <div className="flex gap-3 flex-wrap">
+              {artists.slice(0, 6).map((artist, i) => (
+                <div key={artist.name} className="flex flex-col items-center gap-1 w-12">
+                  <div className="w-11 h-11 rounded-full overflow-hidden shadow-md flex-shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${AVATAR_COLORS[i % AVATAR_COLORS.length]}, ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]})` }}
                   >
-                    {name[0]}
+                    {artist.cover
+                      ? <img src={artist.cover} alt={artist.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-white font-bold text-sm">{artist.name[0]}</div>
+                    }
                   </div>
-                  <span className="text-[10px] text-gray-500 text-center w-11 truncate">{name}</span>
+                  <span className="text-[10px] text-gray-500 text-center w-12 truncate">{artist.name}</span>
+                  <span className="text-[9px] text-gray-400">{artist.count} {artist.count === 1 ? 'canción' : 'canciones'}</span>
                 </div>
               ))}
+              {artists.length === 0 && (
+                <p className="text-xs text-gray-400">Agrega canciones para ver tus artistas.</p>
+              )}
             </div>
           </div>
 
