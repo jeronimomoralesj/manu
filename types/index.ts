@@ -33,7 +33,8 @@ export interface AppState {
 }
 
 export interface RecommendationResult {
-  songs: Song[]
+  allSongs: Song[]
+  moodSongs: Song[]
   mood: MoodMode
   frequency: number
   message: string

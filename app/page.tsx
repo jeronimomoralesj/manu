@@ -7,7 +7,8 @@ import AudioPlayerBar from '@/components/AudioPlayerBar'
 import { RecommendationResult, Song } from '@/types'
 
 const FALLBACK: RecommendationResult = {
-  songs: [],
+  allSongs: [],
+  moodSongs: [],
   mood: 'cozy_comfort',
   frequency: 89.2,
   message: 'Cargando tu estación personalizada...',
@@ -26,7 +27,7 @@ function HomeInner() {
   const fetchRecommendations = useCallback(async (vibe?: number) => {
     const url = vibe ? `/api/recommendations?vibe=${vibe}` : '/api/recommendations'
     const res = await fetch(url)
-    if (!res.ok) return
+    if (!res.ok) return null
     const json: RecommendationResult = await res.json()
     setData(json)
     setLoading(false)
@@ -34,15 +35,15 @@ function HomeInner() {
   }, [])
 
   useEffect(() => {
-    fetchRecommendations().then((json) => {
+    fetchRecommendations().then(json => {
       if (!json) return
       const playId = searchParams.get('play')
       if (playId) {
-        const target = json.songs.find(s => s.id === playId)
-        if (target) setActiveSong(target)
-      } else if (json.songs.length > 0) {
-        setActiveSong(json.songs[0])
+        const target = json.allSongs.find(s => s.id === playId)
+        if (target) { setActiveSong(target); return }
       }
+      if (json.moodSongs.length > 0) setActiveSong(json.moodSongs[0])
+      else if (json.allSongs.length > 0) setActiveSong(json.allSongs[0])
     })
   }, [])
 
@@ -53,22 +54,22 @@ function HomeInner() {
 
   const handlePlay = (song: Song) => {
     setActiveSong(song)
-    const idx = data.songs.findIndex(s => s.id === song.id)
+    const idx = data.allSongs.findIndex(s => s.id === song.id)
     if (idx !== -1) setSongIndex(idx)
   }
 
   const handleNext = () => {
-    if (!data.songs.length) return
-    const next = (songIndex + 1) % data.songs.length
+    if (!data.allSongs.length) return
+    const next = (songIndex + 1) % data.allSongs.length
     setSongIndex(next)
-    setActiveSong(data.songs[next])
+    setActiveSong(data.allSongs[next])
   }
 
   const handlePrev = () => {
-    if (!data.songs.length) return
-    const prev = (songIndex - 1 + data.songs.length) % data.songs.length
+    if (!data.allSongs.length) return
+    const prev = (songIndex - 1 + data.allSongs.length) % data.allSongs.length
     setSongIndex(prev)
-    setActiveSong(data.songs[prev])
+    setActiveSong(data.allSongs[prev])
   }
 
   return (
@@ -76,14 +77,10 @@ function HomeInner() {
       className="flex h-screen overflow-hidden relative"
       style={{ background: '#F4F5F7', fontFamily: "'Inter', sans-serif" }}
     >
-      {/* Radio panel — hidden on mobile unless toggled */}
+      {/* Radio panel */}
       <div
-        className={`
-          flex-shrink-0 h-full p-3 md:p-4
-          transition-all duration-300
-          ${showRadio ? 'w-72 md:w-80' : 'w-0 md:w-80'}
-          overflow-hidden
-        `}
+        className={`flex-shrink-0 h-full p-3 md:p-4 transition-all duration-300 overflow-hidden
+          ${showRadio ? 'w-72' : 'w-0'} md:w-80`}
       >
         <div className="w-64 md:w-full h-full">
           <RadioPlayer
@@ -105,7 +102,6 @@ function HomeInner() {
         <span className="text-sm">♪</span>
       </button>
 
-      {/* Main dashboard */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -118,8 +114,8 @@ function HomeInner() {
         </div>
       ) : (
         <Dashboard
-          songs={data.songs}
-          mood={data.mood}
+          allSongs={data.allSongs}
+          suggestedMood={data.mood}
           message={data.message}
           notePrefix={data.notePrefix}
           photoUrl={null}

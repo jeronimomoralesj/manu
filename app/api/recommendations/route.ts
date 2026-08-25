@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerClient } from "@/lib/supabase"
+import { getServerClient } from '@/lib/supabase'
 import { runRecommendationAlgorithm } from '@/lib/algorithm'
 import { Song, DailyLog } from '@/types'
 
@@ -9,13 +9,8 @@ export async function GET(req: NextRequest) {
 
   const db = getServerClient()
   const [songsRes, logRes] = await Promise.all([
-    db.from('music_library').select('*'),
-    db
-      .from('daily_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    db.from('music_library').select('*').order('title'),
+    db.from('daily_logs').select('*').order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ])
 
   if (songsRes.error) return NextResponse.json({ error: songsRes.error.message }, { status: 500 })

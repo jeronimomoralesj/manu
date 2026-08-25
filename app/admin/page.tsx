@@ -1,14 +1,15 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
-import { Trash2, Plus, Database, Music, Image as ImageIcon, RefreshCw } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Trash2, Plus, Database, Image as ImageIcon, Pencil, X, Check } from 'lucide-react'
 import { Song, MoodMode } from '@/types'
+import { extractTrackId } from '@/lib/spotify'
 
 const MOOD_OPTIONS: MoodMode[] = ['cozy_comfort', 'playful_connection', 'missing_you', 'wind_down']
 const MOOD_LABELS: Record<MoodMode, string> = {
-  cozy_comfort: 'Momento Acogedor',
-  playful_connection: 'Conexión Juguetona',
-  missing_you: 'Te Extraño',
-  wind_down: 'Para Descansar',
+  cozy_comfort: '☕ Acogedor',
+  playful_connection: '✨ Especial',
+  missing_you: '💙 Te Extraño',
+  wind_down: '🌙 Descansar',
 }
 
 const EMPTY_FORM = {
@@ -24,21 +25,25 @@ const EMPTY_FORM = {
   photo_base64: '',
 }
 
+type FormState = typeof EMPTY_FORM
+
 export default function AdminPage() {
   const [songs, setSongs] = useState<Song[]>([])
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [seeding, setSeeding] = useState(false)
   const [fetchingCover, setFetchingCover] = useState(false)
   const [msg, setMsg] = useState('')
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef<HTMLDivElement>(null)
+  const uriDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   async function loadSongs() {
     const res = await fetch('/api/songs')
     const data = await res.json()
     setSongs(Array.isArray(data) ? data : [])
   }
-
   useEffect(() => { loadSongs() }, [])
 
   function flash(text: string) {
@@ -46,45 +51,83 @@ export default function AdminPage() {
     setTimeout(() => setMsg(''), 3500)
   }
 
-  async function fetchSpotifyCover() {
-    if (!form.spotify_uri) { flash('Ingresa un Spotify URI primero.'); return }
+  const fetchCoverForUri = useCallback(async (uri: string) => {
+    if (!extractTrackId(uri)) return
     setFetchingCover(true)
-    const res = await fetch(`/api/spotify-cover?uri=${encodeURIComponent(form.spotify_uri)}`)
+    const res = await fetch(`/api/spotify-cover?uri=${encodeURIComponent(uri)}`)
     const data = await res.json()
     setFetchingCover(false)
-    if (data.cover_url) {
-      setForm(f => ({ ...f, cover_url: data.cover_url }))
-      flash('Portada obtenida de Spotify ✓')
-    } else {
-      flash('No se encontró portada en Spotify.')
-    }
+    if (data.cover_url) setForm(f => ({ ...f, cover_url: data.cover_url }))
+  }, [])
+
+  // Auto-fetch cover when spotify URI changes (debounced)
+  function handleUriChange(val: string) {
+    setForm(f => ({ ...f, spotify_uri: val }))
+    if (uriDebounce.current) clearTimeout(uriDebounce.current)
+    uriDebounce.current = setTimeout(() => fetchCoverForUri(val), 600)
   }
 
   function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = ev => {
       const result = ev.target?.result as string
-      // Strip the data:image/...;base64, prefix — store only the base64 string
-      const base64 = result.split(',')[1]
-      setForm(f => ({ ...f, photo_base64: base64 }))
+      setForm(f => ({ ...f, photo_base64: result.split(',')[1] }))
     }
     reader.readAsDataURL(file)
   }
 
-  async function handleAdd(e: React.FormEvent) {
+  function startEdit(song: Song) {
+    setEditingId(song.id)
+    setForm({
+      title: song.title,
+      artist: song.artist,
+      spotify_uri: song.spotify_uri,
+      cover_url: song.cover_url ?? '',
+      mood_mode: song.mood_mode ?? 'cozy_comfort',
+      valence: String(song.valence),
+      energy: String(song.energy),
+      acousticness: String(song.acousticness),
+      personal_note: song.personal_note ?? '',
+      photo_base64: song.photo_base64 ?? '',
+    })
+    formRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    const res = await fetch('/api/songs', {
-      method: 'POST',
+
+    const payload = {
+      ...form,
+      valence: Number(form.valence),
+      energy: Number(form.energy),
+      acousticness: Number(form.acousticness),
+      cover_url: form.cover_url || null,
+      personal_note: form.personal_note || null,
+      photo_base64: form.photo_base64 || null,
+    }
+
+    const url = editingId ? `/api/songs/${editingId}` : '/api/songs'
+    const method = editingId ? 'PATCH' : 'POST'
+
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     })
     setLoading(false)
+
     if (res.ok) {
       setForm(EMPTY_FORM)
-      flash('Canción agregada ✓')
+      setEditingId(null)
+      flash(editingId ? 'Canción actualizada ✓' : 'Canción agregada ✓')
       loadSongs()
     } else {
       const err = await res.json()
@@ -95,6 +138,7 @@ export default function AdminPage() {
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta canción?')) return
     await fetch(`/api/songs?id=${id}`, { method: 'DELETE' })
+    if (editingId === id) cancelEdit()
     loadSongs()
   }
 
@@ -114,24 +158,24 @@ export default function AdminPage() {
 
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FF5722] flex items-center justify-center">
-              <Music className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Admin — Love Frequency</h1>
-              <p className="text-xs text-gray-400">Biblioteca de canciones</p>
-            </div>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Admin — Love Frequency</h1>
+            <p className="text-xs text-gray-400">Biblioteca de canciones</p>
           </div>
-          <button
-            onClick={handleSeed}
-            disabled={seeding}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-            style={{ background: '#374151' }}
-          >
-            <Database className="w-4 h-4" />
-            {seeding ? 'Cargando...' : 'Seed 10 canciones'}
-          </button>
+          <div className="flex gap-2">
+            <a href="/" className="px-3 py-2 rounded-xl text-sm font-semibold text-gray-600 bg-white border border-gray-200">
+              ← Ver app
+            </a>
+            <button
+              onClick={handleSeed}
+              disabled={seeding}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: '#374151' }}
+            >
+              <Database className="w-4 h-4" />
+              {seeding ? 'Cargando...' : 'Seed 10 canciones'}
+            </button>
+          </div>
         </div>
 
         {msg && (
@@ -140,12 +184,21 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Add Song Form */}
-        <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
+        {/* Form */}
+        <div ref={formRef} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
           <h2 className="font-bold text-gray-800 mb-5 flex items-center gap-2">
-            <Plus className="w-4 h-4 text-[#FF5722]" /> Agregar Canción
+            {editingId
+              ? <><Pencil className="w-4 h-4 text-[#FF5722]" /> Editando canción</>
+              : <><Plus className="w-4 h-4 text-[#FF5722]" /> Agregar Canción</>
+            }
+            {editingId && (
+              <button onClick={cancelEdit} className="ml-auto text-xs text-gray-400 hover:text-red-500 flex items-center gap-1">
+                <X className="w-3.5 h-3.5" /> Cancelar
+              </button>
+            )}
           </h2>
-          <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
             {[
               { key: 'title', label: 'Título', placeholder: 'Fall in Love Alone', required: true },
@@ -163,42 +216,25 @@ export default function AdminPage() {
               </div>
             ))}
 
-            {/* Spotify URI + fetch cover */}
+            {/* Spotify URL/URI */}
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Spotify URI</label>
-              <div className="flex gap-2">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Link de Spotify{' '}
+                <span className="font-normal text-gray-400">(URL o URI — la portada se obtiene automáticamente)</span>
+              </label>
+              <div className="flex gap-2 items-center">
                 <input
                   required
                   value={form.spotify_uri}
-                  onChange={e => setForm(f => ({ ...f, spotify_uri: e.target.value }))}
-                  placeholder="spotify:track:2Fxmhks0LivefKFGTNzmjo"
+                  onChange={e => handleUriChange(e.target.value)}
+                  placeholder="https://open.spotify.com/track/... o spotify:track:..."
                   className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#FF5722] transition-colors"
                 />
-                <button
-                  type="button"
-                  onClick={fetchSpotifyCover}
-                  disabled={fetchingCover}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white flex-shrink-0 disabled:opacity-50"
-                  style={{ background: '#1DB954' }}
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${fetchingCover ? 'animate-spin' : ''}`} />
-                  {fetchingCover ? '...' : 'Obtener portada'}
-                </button>
-              </div>
-            </div>
-
-            {/* Cover URL preview */}
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">URL de portada</label>
-              <div className="flex gap-3 items-start">
-                <input
-                  value={form.cover_url}
-                  onChange={e => setForm(f => ({ ...f, cover_url: e.target.value }))}
-                  placeholder="https://i.scdn.co/image/..."
-                  className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#FF5722] transition-colors"
-                />
-                {form.cover_url && (
-                  <img src={form.cover_url} alt="preview" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 shadow" />
+                {fetchingCover && (
+                  <div className="w-5 h-5 border-2 border-t-green-500 border-gray-200 rounded-full animate-spin flex-shrink-0" />
+                )}
+                {form.cover_url && !fetchingCover && (
+                  <img src={form.cover_url} alt="cover" className="w-10 h-10 rounded-xl object-cover flex-shrink-0 shadow" />
                 )}
               </div>
             </div>
@@ -220,7 +256,7 @@ export default function AdminPage() {
               <label className="block text-xs font-semibold text-gray-500 mb-1">
                 Foto que me recuerda de ti en esta canción
               </label>
-              <div className="flex gap-3 items-start">
+              <div className="flex gap-3 items-center">
                 <button
                   type="button"
                   onClick={() => photoInputRef.current?.click()}
@@ -229,27 +265,19 @@ export default function AdminPage() {
                   <ImageIcon className="w-4 h-4" />
                   {form.photo_base64 ? 'Cambiar foto' : 'Subir foto'}
                 </button>
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handlePhotoUpload}
-                />
+                <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                 {form.photo_base64 && (
                   <div className="relative">
                     <img
                       src={`data:image/jpeg;base64,${form.photo_base64}`}
                       alt="preview"
-                      className="w-16 h-16 rounded-xl object-cover shadow"
+                      className="w-14 h-14 rounded-xl object-cover shadow"
                     />
                     <button
                       type="button"
                       onClick={() => setForm(f => ({ ...f, photo_base64: '' }))}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
-                    >
-                      <span className="text-white text-xs">×</span>
-                    </button>
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs"
+                    >×</button>
                   </div>
                 )}
               </div>
@@ -257,7 +285,7 @@ export default function AdminPage() {
 
             {/* Mood Mode */}
             <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Mood</label>
+              <label className="block text-xs font-semibold text-gray-500 mb-2">Categoría</label>
               <div className="flex gap-2 flex-wrap">
                 {MOOD_OPTIONS.map(m => (
                   <button
@@ -300,10 +328,15 @@ export default function AdminPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50"
+                className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 style={{ background: '#FF5722' }}
               >
-                {loading ? 'Agregando...' : 'Agregar Canción'}
+                {loading
+                  ? 'Guardando...'
+                  : editingId
+                    ? <><Check className="w-4 h-4" /> Guardar Cambios</>
+                    : <><Plus className="w-4 h-4" /> Agregar Canción</>
+                }
               </button>
             </div>
           </form>
@@ -317,7 +350,10 @@ export default function AdminPage() {
           ) : (
             <div className="space-y-2">
               {songs.map(song => (
-                <div key={song.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50">
+                <div
+                  key={song.id}
+                  className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${editingId === song.id ? 'bg-orange-50 border border-orange-200' : 'hover:bg-gray-50'}`}
+                >
                   <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
                     {song.cover_url && <img src={song.cover_url} alt={song.title} className="w-full h-full object-cover" />}
                   </div>
@@ -328,20 +364,24 @@ export default function AdminPage() {
                       <p className="text-xs text-[#FF5722] truncate italic">"{song.personal_note}"</p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
                     {song.photo_base64 && (
-                      <img
-                        src={`data:image/jpeg;base64,${song.photo_base64}`}
-                        alt="foto"
-                        className="w-7 h-7 rounded-lg object-cover"
-                      />
+                      <img src={`data:image/jpeg;base64,${song.photo_base64}`} alt="foto" className="w-7 h-7 rounded-lg object-cover" />
                     )}
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 hidden sm:block">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 hidden sm:block whitespace-nowrap">
                       {song.mood_mode ? MOOD_LABELS[song.mood_mode as MoodMode] : '—'}
                     </span>
                     <button
+                      onClick={() => startEdit(song)}
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-colors"
+                      title="Editar"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
                       onClick={() => handleDelete(song.id)}
                       className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+                      title="Eliminar"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -352,10 +392,10 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* Schema reminder */}
+        {/* SQL reminder */}
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-700">
-          <strong>SQL requerido en Supabase:</strong>
-          <pre className="mt-1 font-mono overflow-x-auto">ALTER TABLE music_library ADD COLUMN IF NOT EXISTS photo_base64 TEXT;</pre>
+          <strong>SQL requerido en Supabase (solo una vez):</strong>
+          <pre className="mt-1 font-mono overflow-x-auto whitespace-pre-wrap">ALTER TABLE music_library ADD COLUMN IF NOT EXISTS photo_base64 TEXT;</pre>
         </div>
       </div>
     </div>

@@ -1,88 +1,76 @@
 import { MoodMode, DailyLog, RecommendationResult, Song } from '@/types'
 
-interface AlgorithmInput {
-  vibeScore: number
-  sawEachOther: boolean
-  hourOfDay: number
-  dayOfWeek: number
-}
-
-function calculateFrequency(input: AlgorithmInput): number {
-  const { vibeScore, sawEachOther, hourOfDay, dayOfWeek } = input
+function calculateFrequency(vibeScore: number, sawEachOther: boolean): number {
+  const now = new Date()
+  const hour = now.getHours()
+  const isWeekend = now.getDay() === 0 || now.getDay() === 6
   const base = 87.5
-  const vibeBoost = vibeScore * 1.8
-  const togetherBoost = sawEachOther ? 3.2 : 0
-  const eveningBoost = hourOfDay >= 18 ? 1.1 : hourOfDay <= 9 ? 0.6 : 0
-  const weekendBoost = dayOfWeek === 0 || dayOfWeek === 6 ? 0.7 : 0
-  const raw = base + vibeBoost + togetherBoost + eveningBoost + weekendBoost
+  const raw =
+    base +
+    vibeScore * 1.8 +
+    (sawEachOther ? 3.2 : 0) +
+    (hour >= 18 ? 1.1 : hour <= 9 ? 0.6 : 0) +
+    (isWeekend ? 0.7 : 0)
   return Math.min(107.9, Math.max(87.5, Math.round(raw * 10) / 10))
 }
 
-function determineMood(input: AlgorithmInput): MoodMode {
-  const { vibeScore, sawEachOther, hourOfDay } = input
+function determineMood(vibeScore: number, sawEachOther: boolean): MoodMode {
+  const hour = new Date().getHours()
   if (vibeScore >= 4 && sawEachOther) return 'playful_connection'
   if (vibeScore >= 4 && !sawEachOther) return 'missing_you'
-  if (vibeScore <= 2 || hourOfDay >= 21) return 'wind_down'
+  if (vibeScore <= 2 || hour >= 21) return 'wind_down'
   return 'cozy_comfort'
 }
 
 const MOOD_MESSAGES: Record<MoodMode, string[]> = {
   playful_connection: [
-    "Today felt like the beginning of something forever",
-    "Every moment with you is my favorite song on repeat",
-    "You light up every room, including every corner of my heart",
+    "Hoy se sintió como el comienzo de algo para siempre",
+    "Cada momento contigo es mi canción favorita en repetición",
+    "Iluminas todo cuarto al que entras, incluyendo cada rincón de mi corazón",
   ],
   missing_you: [
-    "Distance is just a reminder of how much I want to be there",
-    "Counting hours until I can hear your laugh again",
-    "You're my favorite thought even when you're far away",
+    "La distancia solo me recuerda cuánto quiero estar allí",
+    "Contando las horas hasta volver a escuchar tu risa",
+    "Eres mi pensamiento favorito aunque estés lejos",
   ],
   cozy_comfort: [
-    "Soft days are better when I imagine them with you",
-    "These songs are a warm hug from me to you",
-    "Let the music wrap around you like I would if I could",
+    "Los días tranquilos son mejores cuando te imagino en ellos",
+    "Estas canciones son un abrazo cálido de mi parte para ti",
+    "Deja que la música te envuelva como lo haría yo si pudiera",
   ],
   wind_down: [
-    "End the day gently — you deserve all the rest",
-    "Let tonight be soft, quiet, and full of peace",
-    "Close your eyes to these songs and dream of good things",
+    "Termina el día con suavidad — te mereces todo el descanso",
+    "Que esta noche sea tranquila, suave y llena de paz",
+    "Cierra los ojos con estas canciones y sueña con cosas bonitas",
   ],
 }
 
 const NOTE_PREFIXES: Record<MoodMode, string> = {
-  playful_connection: "Made you something playful —",
-  missing_you: "Thinking of you, always —",
-  cozy_comfort: "Sending you warmth —",
-  wind_down: "Rest easy, my love —",
+  playful_connection: "Te hice algo especial —",
+  missing_you: "Pensando en ti, siempre —",
+  cozy_comfort: "Te mando calorcito —",
+  wind_down: "Descansa bien, mi amor —",
 }
 
 export function runRecommendationAlgorithm(
   log: DailyLog | null,
-  songs: Song[],
+  allSongs: Song[],
   manualVibeOverride?: number
 ): RecommendationResult {
-  const now = new Date()
-  const input: AlgorithmInput = {
-    vibeScore: manualVibeOverride ?? log?.vibe_score ?? 3,
-    sawEachOther: log?.saw_each_other ?? false,
-    hourOfDay: now.getHours(),
-    dayOfWeek: now.getDay(),
-  }
+  const vibeScore = manualVibeOverride ?? log?.vibe_score ?? 3
+  const sawEachOther = log?.saw_each_other ?? false
 
-  const mood = determineMood(input)
-  const frequency = calculateFrequency(input)
+  const mood = determineMood(vibeScore, sawEachOther)
+  const frequency = calculateFrequency(vibeScore, sawEachOther)
   const messages = MOOD_MESSAGES[mood]
   const message = log?.custom_message ?? messages[Math.floor(Math.random() * messages.length)]
 
-  const filtered = songs.filter((s) => s.mood_mode === mood)
-  const sorted = filtered.sort((a, b) => {
-    const scoreA = Math.abs(a.valence - 0.7) + Math.abs(a.energy - input.vibeScore / 5)
-    const scoreB = Math.abs(b.valence - 0.7) + Math.abs(b.energy - input.vibeScore / 5)
-    return scoreA - scoreB
-  })
+  // Songs for the suggested mood — caller can filter by any mood client-side
+  const moodSongs = allSongs.filter(s => s.mood_mode === mood)
 
   return {
-    songs: sorted.length >= 4 ? sorted : songs.slice(0, 6),
+    allSongs,
+    moodSongs,
     mood,
     frequency,
     message,
