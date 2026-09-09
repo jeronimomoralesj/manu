@@ -78,6 +78,16 @@ export interface SecretDate {
   is_claimed: boolean
 }
 
+export interface Carta {
+  id: string
+  title: string
+  body: string | null
+  image_base64: string | null
+  sent_at: string | null
+  is_read: boolean
+  created_at: string
+}
+
 export interface MapLocation {
   id: string
   city_name: string

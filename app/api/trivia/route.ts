@@ -4,7 +4,7 @@ import { getServerClient } from '@/lib/supabase'
 export async function GET() {
   const db = getServerClient()
   const [questionsRes, datesRes] = await Promise.all([
-    db.from('trivia_questions').select('*').order('is_answered').limit(20),
+    db.from('trivia_questions').select('*').order('created_at', { ascending: true }),
     db.from('secret_dates').select('*').order('required_score'),
   ])
   return NextResponse.json({
@@ -36,7 +36,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ correct, points_earned: correct ? q.points_reward : 0 })
   }
 
-  // Seed trivia questions
   if (body._action === 'seed') {
     const questions = [
       { question: '¿Cuál fue el primer lugar al que fuimos juntos en una cita?', options: ['Cine', 'Restaurante', 'Parque', 'Centro comercial'], correct_option_index: 1, points_reward: 30 },
@@ -57,5 +56,58 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+  // Create a new question
+  const { data, error } = await db
+    .from('trivia_questions')
+    .insert([{
+      question: body.question,
+      options: body.options,
+      correct_option_index: Number(body.correct_option_index),
+      points_reward: Number(body.points_reward) || 20,
+      is_answered: false,
+    }])
+    .select()
+    .single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data, { status: 201 })
+}
+
+export async function PATCH(req: NextRequest) {
+  const body = await req.json()
+  const db = getServerClient()
+
+  if (body._action === 'reset') {
+    const { data, error } = await db
+      .from('trivia_questions')
+      .update({ is_answered: false })
+      .eq('id', body.id)
+      .select()
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  }
+
+  const { data, error } = await db
+    .from('trivia_questions')
+    .update({
+      question: body.question,
+      options: body.options,
+      correct_option_index: Number(body.correct_option_index),
+      points_reward: Number(body.points_reward),
+    })
+    .eq('id', body.id)
+    .select()
+    .single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
+
+export async function DELETE(req: NextRequest) {
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const db = getServerClient()
+  const { error } = await db.from('trivia_questions').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }

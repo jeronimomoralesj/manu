@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerClient } from '@/lib/supabase'
+import { extractTrackId } from '@/lib/spotify'
 
 export async function GET() {
   const db = getServerClient()
@@ -9,7 +10,32 @@ export async function GET() {
     .order('title')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  const songs = data ?? []
+
+  // Auto-fetch and persist missing Spotify covers in background
+  const needsCovers = songs.filter((s: { cover_url: string | null; spotify_uri: string }) => !s.cover_url && extractTrackId(s.spotify_uri))
+  if (needsCovers.length > 0) {
+    Promise.all(
+      needsCovers.map(async (s: { id: string; spotify_uri: string }) => {
+        const trackId = extractTrackId(s.spotify_uri)!
+        try {
+          const res = await fetch(
+            `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`,
+            { next: { revalidate: 86400 } }
+          )
+          if (!res.ok) return
+          const json = await res.json()
+          const cover_url = json.thumbnail_url as string | undefined
+          if (cover_url) {
+            await db.from('music_library').update({ cover_url }).eq('id', s.id)
+          }
+        } catch {}
+      })
+    ).catch(() => {})
+  }
+
+  return NextResponse.json(songs)
 }
 
 export async function POST(req: NextRequest) {

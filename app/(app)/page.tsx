@@ -50,11 +50,20 @@ function HomeInner() {
     if (idx !== -1) setSongIndex(idx)
   }
 
+  const awardSongPoints = () => {
+    fetch('/api/gamification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ points: 2 }),
+    }).catch(() => {})
+  }
+
   const handleNext = () => {
     if (!data.allSongs.length) return
     const next = (songIndex + 1) % data.allSongs.length
     setSongIndex(next)
     setActiveSong(data.allSongs[next])
+    awardSongPoints()
   }
 
   const handlePrev = () => {
@@ -66,11 +75,13 @@ function HomeInner() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center" style={{ background: '#0a0a0a' }}>
         <div className="text-center">
-          <div className="w-14 h-14 rounded-full border-4 animate-spin mx-auto mb-3"
-            style={{ borderColor: '#e5e7eb', borderTopColor: '#FF5722' }} />
-          <p className="text-gray-400 text-sm">Sintonizando tu frecuencia...</p>
+          <div
+            className="w-14 h-14 rounded-full animate-spin mx-auto mb-3"
+            style={{ border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#FF5722' }}
+          />
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Sintonizando tu frecuencia...</p>
         </div>
       </div>
     )

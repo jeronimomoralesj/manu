@@ -3,6 +3,22 @@ import { useState, useEffect } from 'react'
 import { HelpCircle, Check, X, Star, Ticket } from 'lucide-react'
 import { TriviaQuestion, SecretDate, Gamification } from '@/types'
 
+const ACCENT = '#FF5722'
+
+const GLASS = {
+  background: 'rgba(255,255,255,0.08)',
+  backdropFilter: 'blur(28px) saturate(1.8)',
+  border: '1px solid rgba(255,255,255,0.14)',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.22)',
+} as const
+
+const GLASS_DARK = {
+  background: 'rgba(255,255,255,0.04)',
+  backdropFilter: 'blur(28px) saturate(1.5)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  boxShadow: '0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+} as const
+
 export default function TriviaPage() {
   const [questions, setQuestions] = useState<TriviaQuestion[]>([])
   const [secretDates, setSecretDates] = useState<SecretDate[]>([])
@@ -38,11 +54,7 @@ export default function TriviaPage() {
     load()
   }
 
-  function next() {
-    setSelected(null)
-    setResult(null)
-    setCurrent(c => c + 1)
-  }
+  function next() { setSelected(null); setResult(null); setCurrent(c => c + 1) }
 
   async function handleSeed() {
     setSeeding(true)
@@ -56,176 +68,201 @@ export default function TriviaPage() {
   }
 
   const unanswered = questions.filter(q => !q.is_answered)
-  const answered = questions.filter(q => q.is_answered)
-  const q = unanswered[current] ?? null
-  const pts = gami?.total_points ?? 0
+  const answered   = questions.filter(q => q.is_answered)
+  const q          = unanswered[current] ?? null
+  const pts        = gami?.total_points ?? 0
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 pb-24 md:pb-8 space-y-6" style={{ background: '#F4F5F7' }}>
+    <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 pb-24 md:pb-8 space-y-5" style={{ background: '#0a0a0a' }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <HelpCircle className="w-6 h-6 text-[#FF5722]" /> Trivia del Amor
-          </h1>
-          <p className="text-sm text-gray-400 mt-1">Responde y gana puntos</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-full text-sm font-bold" style={{ background: '#FF572215', color: '#FF5722' }}>
-            {pts} pts
+      {/* Ambient */}
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{ background: 'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,87,34,0.1) 0%, transparent 70%)', zIndex: 0 }}
+      />
+
+      <div className="relative z-10 space-y-5">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.5px', color: '#ffffff' }}>
+              Trivia del Amor
+            </h1>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>Responde y gana puntos</p>
           </div>
-          {questions.length === 0 && (
-            <button onClick={handleSeed} disabled={seeding}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white disabled:opacity-50"
-              style={{ background: '#374151' }}
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl"
+              style={{ ...GLASS, background: `${ACCENT}18`, border: `1px solid ${ACCENT}30` }}
             >
-              {seeding ? '...' : 'Seed preguntas'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Progress */}
-      {questions.length > 0 && (
-        <div
-          className="rounded-2xl p-4 flex items-center gap-4"
-          style={{ background: '#fff', boxShadow: '4px 4px 16px rgba(0,0,0,0.05)' }}
-        >
-          <div className="flex-1">
-            <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-              <span>{answered.length}/{questions.length} respondidas</span>
-              <span>{unanswered.length} restantes</span>
+              <Star style={{ width: 14, height: 14, color: ACCENT, fill: ACCENT }} />
+              <span style={{ fontWeight: 700, fontSize: 15, color: ACCENT }}>{pts}</span>
             </div>
-            <div className="w-full h-2 rounded-full bg-gray-100">
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${(answered.length / questions.length) * 100}%`, background: '#FF5722' }}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-1 text-[#FF5722]">
-            <Star className="w-4 h-4 fill-current" />
-            <span className="font-bold text-sm">{pts}</span>
+            {questions.length === 0 && (
+              <button
+                onClick={handleSeed}
+                disabled={seeding}
+                className="px-3.5 py-2 rounded-2xl text-xs font-semibold disabled:opacity-50 transition-all active:scale-95"
+                style={GLASS_DARK}
+              >
+                <span style={{ color: 'rgba(255,255,255,0.6)' }}>{seeding ? '...' : 'Seed'}</span>
+              </button>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Current question */}
-      {q ? (
-        <div
-          className="rounded-3xl p-6 space-y-5"
-          style={{ background: '#fff', boxShadow: '4px 4px 16px rgba(0,0,0,0.07)' }}
-        >
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-full bg-[#FF572215] flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-black text-[#FF5722]">{current + 1}</span>
-            </div>
-            <p className="text-base font-bold text-gray-800 leading-snug">{q.question}</p>
-          </div>
-
-          <div className="space-y-2.5">
-            {q.options.map((opt, i) => {
-              const isSelected = selected === i
-              const isCorrect = result && i === q.correct_option_index
-              const isWrong = result && isSelected && !result.correct
-
-              let bg = '#F9FAFB'
-              let border = '#E5E7EB'
-              let text = '#374151'
-              if (isCorrect) { bg = '#F0FDF4'; border = '#22C55E'; text = '#166534' }
-              else if (isWrong) { bg = '#FEF2F2'; border = '#EF4444'; text = '#991B1B' }
-              else if (isSelected) { bg = '#FFF7ED'; border = '#FF5722'; text = '#9A3412' }
-
-              return (
-                <button
-                  key={i}
-                  onClick={() => handleAnswer(i)}
-                  disabled={selected !== null}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border-2 text-left transition-all disabled:cursor-default"
-                  style={{ background: bg, borderColor: border, color: text }}
-                >
-                  <span className="w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs font-bold flex-shrink-0"
-                    style={{ borderColor: border }}>
-                    {String.fromCharCode(65 + i)}
-                  </span>
-                  <span className="text-sm font-medium flex-1">{opt}</span>
-                  {isCorrect && <Check className="w-4 h-4 text-green-500 flex-shrink-0" />}
-                  {isWrong && <X className="w-4 h-4 text-red-500 flex-shrink-0" />}
-                </button>
-              )
-            })}
-          </div>
-
-          {result && (
-            <div className={`rounded-2xl p-4 flex items-center justify-between ${result.correct ? 'bg-green-50' : 'bg-red-50'}`}>
-              <div>
-                <p className={`font-bold text-sm ${result.correct ? 'text-green-700' : 'text-red-700'}`}>
-                  {result.correct ? '¡Correcto! 🎉' : 'No era esa 💙'}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {result.correct ? `+${result.points} puntos ganados` : 'La respuesta correcta está resaltada'}
-                </p>
+        {/* Progress */}
+        {questions.length > 0 && (
+          <div className="rounded-3xl p-4 flex items-center gap-4" style={GLASS_DARK}>
+            {/* Specular */}
+            <div className="absolute inset-0 pointer-events-none rounded-3xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 50%)' }} />
+            <div className="flex-1">
+              <div className="flex justify-between mb-2">
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>{answered.length}/{questions.length} respondidas</span>
+                <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>{unanswered.length} restantes</span>
               </div>
-              {current < unanswered.length - 1 && (
-                <button
-                  onClick={next}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white"
-                  style={{ background: '#FF5722' }}
-                >
-                  Siguiente →
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      ) : questions.length > 0 ? (
-        <div
-          className="rounded-3xl p-8 text-center"
-          style={{ background: '#fff', boxShadow: '4px 4px 16px rgba(0,0,0,0.06)' }}
-        >
-          <p className="text-4xl mb-3">🎉</p>
-          <h3 className="text-lg font-black text-gray-800">¡Terminaste todas las preguntas!</h3>
-          <p className="text-sm text-gray-400 mt-1">Acumulaste {pts} puntos en total</p>
-        </div>
-      ) : null}
-
-      {/* Secret Date Tickets */}
-      {secretDates.length > 0 && (
-        <div>
-          <h2 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <Ticket className="w-4 h-4 text-[#FF5722]" /> Citas Secretas
-          </h2>
-          <div className="space-y-3">
-            {secretDates.map(date => {
-              const earned = pts >= date.required_score
-              return (
+              <div className="w-full rounded-full overflow-hidden" style={{ height: 4, background: 'rgba(255,255,255,0.08)' }}>
                 <div
-                  key={date.id}
-                  className={`rounded-2xl p-4 flex items-center gap-4 ${earned ? '' : 'opacity-60'}`}
-                  style={{
-                    background: earned ? 'linear-gradient(135deg, #FF8A65, #FF5722)' : '#fff',
-                    boxShadow: '4px 4px 16px rgba(0,0,0,0.07)',
-                  }}
-                >
-                  <Ticket className={`w-8 h-8 flex-shrink-0 ${earned ? 'text-white' : 'text-gray-400'}`} />
-                  <div className="flex-1">
-                    <p className={`font-bold text-sm ${earned ? 'text-white' : 'text-gray-700'}`}>{date.title}</p>
-                    <p className={`text-xs mt-0.5 ${earned ? 'text-white/70' : 'text-gray-400'}`}>
-                      {earned ? date.ticket_number : `Necesitas ${date.required_score} pts`}
-                    </p>
-                  </div>
-                  {earned && !date.is_claimed && (
-                    <span className="px-2.5 py-1 rounded-full bg-white/20 text-white text-xs font-bold">
-                      ¡Ganado!
-                    </span>
-                  )}
-                </div>
-              )
-            })}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${(answered.length / questions.length) * 100}%`, background: `linear-gradient(90deg, ${ACCENT}, #FF8A65)` }}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Current question */}
+        {q ? (
+          <div className="rounded-3xl p-6 space-y-5 relative" style={GLASS}>
+            {/* Specular shimmer */}
+            <div className="absolute inset-0 pointer-events-none rounded-3xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 50%)' }} />
+
+            <div className="flex items-start gap-3 relative">
+              <div
+                className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: `${ACCENT}20`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)' }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>{current + 1}</span>
+              </div>
+              <p style={{ fontSize: 17, fontWeight: 700, color: '#ffffff', lineHeight: 1.45, paddingTop: 6 }}>{q.question}</p>
+            </div>
+
+            <div className="space-y-2.5 relative">
+              {q.options.map((opt, i) => {
+                const isSelected = selected === i
+                const isCorrect  = result && i === q.correct_option_index
+                const isWrong    = result && isSelected && !result.correct
+
+                let bg     = 'rgba(255,255,255,0.06)'
+                let border = 'rgba(255,255,255,0.1)'
+                let color  = 'rgba(255,255,255,0.75)'
+                let shadow = 'inset 0 1px 0 rgba(255,255,255,0.08)'
+                if (isCorrect) { bg = 'rgba(34,197,94,0.12)'; border = 'rgba(34,197,94,0.5)'; color = '#4ade80'; shadow = 'inset 0 1px 0 rgba(34,197,94,0.2)' }
+                else if (isWrong) { bg = 'rgba(239,68,68,0.1)'; border = 'rgba(239,68,68,0.45)'; color = '#f87171'; shadow = 'inset 0 1px 0 rgba(239,68,68,0.15)' }
+                else if (isSelected) { bg = `${ACCENT}14`; border = `${ACCENT}60`; color = '#ffffff'; shadow = `inset 0 1px 0 rgba(255,87,34,0.25)` }
+
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleAnswer(i)}
+                    disabled={selected !== null}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl border text-left transition-all disabled:cursor-default active:scale-[0.98]"
+                    style={{ background: bg, borderColor: border, color, boxShadow: shadow, backdropFilter: 'blur(12px)' }}
+                  >
+                    <span
+                      className="w-7 h-7 rounded-full border flex items-center justify-center flex-shrink-0"
+                      style={{ borderColor: border, fontSize: 11, fontWeight: 700, color }}
+                    >
+                      {String.fromCharCode(65 + i)}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>{opt}</span>
+                    {isCorrect && <Check style={{ width: 16, height: 16, color: '#4ade80', flexShrink: 0 }} />}
+                    {isWrong   && <X    style={{ width: 16, height: 16, color: '#f87171', flexShrink: 0 }} />}
+                  </button>
+                )
+              })}
+            </div>
+
+            {result && (
+              <div
+                className="rounded-2xl p-4 flex items-center justify-between relative"
+                style={{
+                  background: result.correct ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                  border:     result.correct ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(239,68,68,0.25)',
+                  boxShadow:  result.correct ? 'inset 0 1px 0 rgba(34,197,94,0.2)' : 'inset 0 1px 0 rgba(239,68,68,0.15)',
+                }}
+              >
+                <div>
+                  <p style={{ fontWeight: 700, fontSize: 14, color: result.correct ? '#4ade80' : '#f87171' }}>
+                    {result.correct ? '¡Correcto! 🎉' : 'No era esa 💙'}
+                  </p>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+                    {result.correct ? `+${result.points} puntos ganados` : 'La correcta está resaltada'}
+                  </p>
+                </div>
+                {current < unanswered.length - 1 && (
+                  <button
+                    onClick={next}
+                    className="px-4 py-2 rounded-xl font-bold transition-all active:scale-95"
+                    style={{ background: ACCENT, color: '#fff', fontSize: 13 }}
+                  >
+                    Siguiente →
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : questions.length > 0 ? (
+          <div className="rounded-3xl p-8 text-center relative" style={GLASS}>
+            <div className="absolute inset-0 pointer-events-none rounded-3xl" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 50%)' }} />
+            <p style={{ fontSize: 44, marginBottom: 12 }}>🎉</p>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.4px' }}>¡Terminaste todas!</h3>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)', marginTop: 4 }}>Acumulaste {pts} puntos en total</p>
+          </div>
+        ) : null}
+
+        {/* Secret dates */}
+        {secretDates.length > 0 && (
+          <div>
+            <h2 style={{ fontWeight: 700, color: '#ffffff', marginBottom: 12, fontSize: 16 }} className="flex items-center gap-2">
+              <Ticket style={{ width: 16, height: 16, color: ACCENT }} /> Citas Secretas
+            </h2>
+            <div className="space-y-3">
+              {secretDates.map(date => {
+                const earned = pts >= date.required_score
+                return (
+                  <div
+                    key={date.id}
+                    className="rounded-3xl p-4 flex items-center gap-4 relative"
+                    style={earned
+                      ? { background: 'linear-gradient(135deg, #FF8A65, #FF5722)', boxShadow: '0 8px 32px rgba(255,87,34,0.3), inset 0 1px 0 rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.2)' }
+                      : { ...GLASS_DARK, opacity: 0.6 }
+                    }
+                  >
+                    {earned && (
+                      <div className="absolute inset-0 rounded-3xl pointer-events-none" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%)' }} />
+                    )}
+                    <Ticket style={{ width: 32, height: 32, flexShrink: 0, color: earned ? '#fff' : 'rgba(255,255,255,0.25)' }} />
+                    <div className="flex-1 relative">
+                      <p style={{ fontWeight: 700, fontSize: 14, color: earned ? '#fff' : 'rgba(255,255,255,0.55)' }}>{date.title}</p>
+                      <p style={{ fontSize: 12, marginTop: 2, color: earned ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.3)' }}>
+                        {earned ? date.ticket_number : `Necesitas ${date.required_score} pts`}
+                      </p>
+                    </div>
+                    {earned && !date.is_claimed && (
+                      <span className="relative px-2.5 py-1 rounded-xl text-xs font-bold" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)' }}>
+                        ¡Ganado!
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   )
 }

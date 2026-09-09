@@ -4,13 +4,35 @@
   --animate-spin-slow: spin-slow 4s linear infinite;
 
   @keyframes spin-slow {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
   }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(-1deg); }
+  50%       { transform: translateY(-7px) rotate(1deg); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-4deg); }
+  50%       { transform: rotate(4deg); }
+}
+
+@keyframes hop {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  40%       { transform: translateY(-10px) scaleY(1.05); }
+  60%       { transform: translateY(-8px) scaleY(1.05); }
+}
+
+@keyframes slide {
+  0%, 100% { transform: translateX(-4px); }
+  50%       { transform: translateX(4px); }
+}
+
+@keyframes pulse-grow {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.12); }
 }
 
 * {

@@ -9,9 +9,9 @@ const SEED_SONGS = [
   { title: 'Midnight Rain', artist: 'Taylor Swift', spotify_uri: 'spotify:track:6tNQ70jh4OwmPGpYy6R2o9', cover_url: 'https://i.scdn.co/image/ab67616d0000b273bb54dde68cd23e2a268ae0f5', mood_mode: 'wind_down', valence: 0.38, energy: 0.42, acousticness: 0.5 },
   { title: 'Something Just Like This', artist: 'The Chainsmokers', spotify_uri: 'spotify:track:6RUKPb4LETWmmr3iAEQktW', cover_url: 'https://i.scdn.co/image/ab67616d0000b27322e3ca4e7c8a2e7b1f5e3f7e', mood_mode: 'cozy_comfort', valence: 0.64, energy: 0.68, acousticness: 0.08 },
   { title: 'Starboy', artist: 'The Weeknd, Daft Punk', spotify_uri: 'spotify:track:5aAx2yezTd8zXrkmtKl66Z', cover_url: 'https://i.scdn.co/image/ab67616d0000b2736ed560a208ba5f0766453c19', mood_mode: 'wind_down', valence: 0.55, energy: 0.59, acousticness: 0.06 },
-  { title: '8 Letters', artist: "Why Don't We", spotify_uri: 'spotify:track:1kwDR7C9LmjqEfAk0I1OAP', cover_url: null, mood_mode: 'missing_you', valence: 0.52, energy: 0.48, acousticness: 0.32 },
-  { title: 'Hypnotized', artist: 'Purple Disco Machine', spotify_uri: 'spotify:track:44h4RGFKkCfwTWPdgxvmhk', cover_url: null, mood_mode: 'playful_connection', valence: 0.87, energy: 0.78, acousticness: 0.05 },
-  { title: 'Melodrama', artist: 'Lorde', spotify_uri: 'spotify:track:4lNaOyiMOKhJ0DIPkTK29f', cover_url: null, mood_mode: 'missing_you', valence: 0.31, energy: 0.49, acousticness: 0.18 },
+  { title: '8 Letters', artist: "Why Don't We", spotify_uri: 'spotify:track:1kwDR7C9LmjqEfAk0I1OAP', cover_url: 'https://i.scdn.co/image/ab67616d0000b2736b9c6b16c6bdc9f9e5d76b7b', mood_mode: 'missing_you', valence: 0.52, energy: 0.48, acousticness: 0.32 },
+  { title: 'Hypnotized', artist: 'Purple Disco Machine', spotify_uri: 'spotify:track:44h4RGFKkCfwTWPdgxvmhk', cover_url: 'https://i.scdn.co/image/ab67616d0000b273f54d4b75c3d57f1f7bcd5fbd', mood_mode: 'playful_connection', valence: 0.87, energy: 0.78, acousticness: 0.05 },
+  { title: 'Melodrama', artist: 'Lorde', spotify_uri: 'spotify:track:4lNaOyiMOKhJ0DIPkTK29f', cover_url: 'https://i.scdn.co/image/ab67616d0000b273b3929d9e95ce63c3dc6aa51f', mood_mode: 'missing_you', valence: 0.31, energy: 0.49, acousticness: 0.18 },
 ]
 
 export async function POST() {

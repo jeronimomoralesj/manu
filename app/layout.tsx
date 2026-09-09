@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Love Frequency',
-  description: 'Your personalized music station, curated with love.',
+  title: 'Te amo Manuut',
+  description: '<Para que me pienses más>.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -17,13 +17,13 @@ export default function AudioPlayerBar({ song, onNext, onPrev }: Props) {
 
   return (
     <div
-      className="fixed bottom-4 right-4 left-4 md:left-auto md:w-96 z-50 rounded-2xl overflow-hidden"
-      style={{ boxShadow: '0 16px 48px rgba(0,0,0,0.45)' }}
+      className="fixed bottom-[76px] md:bottom-4 right-4 left-4 md:left-auto md:w-96 z-50 rounded-2xl overflow-hidden"
+      style={{ boxShadow: '0 16px 48px rgba(0,0,0,0.6)', backdropFilter: 'blur(24px)' }}
     >
       {/* Prev / Next strip */}
       <div
         className="flex items-center justify-between px-3 py-1.5"
-        style={{ background: '#111827' }}
+        style={{ background: '#0d0d0d', borderBottom: '1px solid rgba(255,255,255,0.06)' }}
       >
         <p className="text-xs text-gray-400 truncate flex-1 mr-3">{song.title} — {song.artist}</p>
         <div className="flex items-center gap-3 flex-shrink-0">

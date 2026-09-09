@@ -4,7 +4,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="flex h-screen overflow-hidden"
-      style={{ background: '#F4F5F7', fontFamily: "'Inter', sans-serif" }}
+      style={{ background: '#0a0a0a', fontFamily: "'Inter', sans-serif" }}
     >
       <Sidebar />
       {/* Content — pb-20 on mobile for bottom tab bar clearance */}
