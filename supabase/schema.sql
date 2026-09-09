@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS music_library (
   energy FLOAT DEFAULT 0.5,
   acousticness FLOAT DEFAULT 0.5,
   personal_note TEXT,
-  photo_base64 TEXT
+  photo_base64 TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Daily Logs
@@ -42,8 +43,8 @@ CREATE TABLE IF NOT EXISTS user_gamification (
   id INT PRIMARY KEY DEFAULT 1,
   total_points INT DEFAULT 0,
   unlocked_level INT DEFAULT 1,
-  selected_avatar TEXT DEFAULT 'classic_retro',
-  unlocked_avatars TEXT[] DEFAULT ARRAY['classic_retro']
+  selected_avatar TEXT DEFAULT 'horse',
+  unlocked_avatars TEXT[] DEFAULT ARRAY['horse']
 );
 
 -- Memory Vault
@@ -59,25 +60,28 @@ CREATE TABLE IF NOT EXISTS memory_vault (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Trivia
+-- Trivia Questions  (created_at required for ordering)
 CREATE TABLE IF NOT EXISTS trivia_questions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   question TEXT NOT NULL,
   options TEXT[] NOT NULL,
   correct_option_index INT NOT NULL,
   points_reward INT DEFAULT 20,
-  is_answered BOOLEAN DEFAULT FALSE
+  is_answered BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Secret Dates
 CREATE TABLE IF NOT EXISTS secret_dates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   required_score INT NOT NULL DEFAULT 200,
   ticket_number TEXT NOT NULL,
   title TEXT NOT NULL,
-  is_claimed BOOLEAN DEFAULT FALSE
+  is_claimed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Map
+-- Map Locations
 CREATE TABLE IF NOT EXISTS map_locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   city_name TEXT NOT NULL,
@@ -87,15 +91,48 @@ CREATE TABLE IF NOT EXISTS map_locations (
   trip_title TEXT NOT NULL,
   trip_story TEXT,
   photo_urls TEXT[],
-  trip_song_spotify_uri TEXT
+  trip_song_spotify_uri TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS — deny direct client access (service role key bypasses RLS)
-ALTER TABLE music_library ENABLE ROW LEVEL SECURITY;
-ALTER TABLE daily_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE current_app_state ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_gamification ENABLE ROW LEVEL SECURITY;
-ALTER TABLE memory_vault ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trivia_questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE secret_dates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE map_locations ENABLE ROW LEVEL SECURITY;
+-- Cartas (love letters)
+CREATE TABLE IF NOT EXISTS cartas (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  body TEXT,
+  image_base64 TEXT,
+  sent_at TIMESTAMPTZ,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- =============================================
+-- RLS — deny direct client access
+-- (service role key bypasses RLS)
+-- =============================================
+ALTER TABLE music_library        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_logs           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE current_app_state    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_gamification    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE memory_vault         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trivia_questions     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE secret_dates         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE map_locations        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cartas               ENABLE ROW LEVEL SECURITY;
+
+-- =============================================
+-- MIGRATION — run these if tables already exist
+-- (safe to run multiple times)
+-- =============================================
+
+-- Add created_at to trivia_questions if missing
+ALTER TABLE trivia_questions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Add created_at to secret_dates if missing
+ALTER TABLE secret_dates ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Add created_at to map_locations if missing
+ALTER TABLE map_locations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Add created_at to music_library if missing
+ALTER TABLE music_library ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
