@@ -79,6 +79,8 @@ export interface SecretDate {
 }
 
 export interface Carta {
+  unlock_at: string | null
+  is_locked: boolean
   id: string
   title: string
   body: string | null
