@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Mail, MailOpen, X, Calendar, Inbox } from 'lucide-react'
+import { Mail, MailOpen, X, Calendar, Inbox, LockKeyhole } from 'lucide-react'
 import { Carta } from '@/types'
 
 const ACCENT = '#FF5722'
@@ -20,7 +20,7 @@ const GLASS_DARK = {
 } as const
 
 function fmt(d: string) {
-  return new Date(d).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+  return new Date(d).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Bogota' })
 }
 
 function ReadingView({ carta, onClose }: { carta: Carta; onClose: () => void }) {
@@ -47,6 +47,7 @@ function ReadingView({ carta, onClose }: { carta: Carta; onClose: () => void }) 
         </div>
         <button
           onClick={onClose}
+          aria-label="Cerrar carta"
           className="flex-shrink-0 ml-4 rounded-full flex items-center justify-center transition-all active:scale-90"
           style={{ width: 34, height: 34, ...GLASS_DARK }}
         >
@@ -95,29 +96,51 @@ export default function CartasPage() {
   const [cartas, setCartas]   = useState<Carta[]>([])
   const [active, setActive]   = useState<Carta | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [openingId, setOpeningId] = useState<string | null>(null)
 
-  async function load() {
-    const res  = await fetch('/api/cartas')
-    const data = await res.json()
-    setCartas(Array.isArray(data) ? data : [])
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const openCarta = useCallback(async (carta: Carta) => {
-    setActive(carta)
-    if (!carta.is_read) {
-      await fetch(`/api/cartas/${carta.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ is_read: true }),
-      })
-      setCartas(prev => prev.map(c => c.id === carta.id ? { ...c, is_read: true } : c))
-    }
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/cartas', { cache: 'no-store' })
+      if (!res.ok) throw new Error('No se pudieron cargar las cartas.')
+      const data = await res.json()
+      setCartas(Array.isArray(data) ? data : [])
+      setError('')
+    } catch { setError('No se pudieron cargar las cartas. Inténtalo de nuevo.') }
+    finally { setLoading(false) }
   }, [])
 
-  const unread = cartas.filter(c => !c.is_read).length
+  useEffect(() => {
+    let mounted = true
+    queueMicrotask(() => { if (mounted) void load() })
+    // Server time decides availability, including after returning to the tab.
+    const refresh = () => { if (document.visibilityState === 'visible') void load() }
+    const timer = window.setInterval(refresh, 15000)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('focus', refresh)
+    return () => { mounted = false; window.clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh) }
+  }, [load])
+
+  const openCarta = useCallback(async (carta: Carta) => {
+    if (carta.is_locked || openingId) return
+    setOpeningId(carta.id)
+    try {
+      const res = await fetch(`/api/cartas/${carta.id}`, { cache: 'no-store' })
+      if (!res.ok) { await load(); throw new Error('Esta carta todavía no está disponible.') }
+      const current: Carta = await res.json()
+      setActive(current)
+      if (!current.is_read) {
+        const marked = await fetch(`/api/cartas/${carta.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_read: true }),
+        })
+        if (marked.ok) setCartas(prev => prev.map(c => c.id === carta.id ? { ...c, is_read: true } : c))
+      }
+      setError('')
+    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo abrir la carta.') }
+    finally { setOpeningId(null) }
+  }, [load, openingId])
+
+  const unread = cartas.filter(c => !c.is_locked && !c.is_read).length
 
   return (
     <>
@@ -147,6 +170,8 @@ export default function CartasPage() {
           </div>
 
           <div className="px-4 space-y-2.5">
+            <p className="px-1 pb-2 text-xs text-white/40">Cada carta se abre a las 00:00 de su fecha, hora de Colombia.</p>
+            {error && <div role="alert" className="rounded-2xl p-4 text-sm text-orange-200" style={GLASS}>{error} <button onClick={() => void load()} className="underline ml-2">Reintentar</button></div>}
             {/* Loading */}
             {loading && (
               <div className="flex justify-center py-16">
@@ -173,12 +198,14 @@ export default function CartasPage() {
 
             {/* Letter cards */}
             {cartas.map(carta => {
-              const isUnread = !carta.is_read
+              const isUnread = !carta.is_locked && !carta.is_read
               return (
                 <button
                   key={carta.id}
                   onClick={() => openCarta(carta)}
-                  className="w-full text-left rounded-3xl overflow-hidden flex items-center gap-4 px-5 py-4 transition-all active:scale-[0.98]"
+                  disabled={carta.is_locked || openingId !== null}
+                  aria-label={carta.is_locked ? `${carta.title}. Cerrada hasta ${fmt(carta.unlock_at!)}, hora de Colombia` : `Leer ${carta.title}`}
+                  className="relative w-full text-left rounded-3xl overflow-hidden flex items-center gap-4 px-5 py-4 transition-all active:scale-[0.98]"
                   style={{
                     ...(isUnread ? GLASS : GLASS_DARK),
                     borderLeft: isUnread ? `3px solid ${ACCENT}` : undefined,
@@ -202,7 +229,7 @@ export default function CartasPage() {
                       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)',
                     }}
                   >
-                    {isUnread
+                    {carta.is_locked ? <LockKeyhole style={{ width: 18, height: 18, color: '#ffad90' }} /> : isUnread
                       ? <Mail     style={{ width: 18, height: 18, color: ACCENT }} />
                       : <MailOpen style={{ width: 18, height: 18, color: 'rgba(255,255,255,0.3)' }} />
                     }
@@ -222,8 +249,9 @@ export default function CartasPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      {carta.sent_at && (
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>{fmt(carta.sent_at)}</span>
+                      {carta.is_locked && carta.unlock_at && <span className="text-xs text-orange-200">Se abre el {fmt(carta.unlock_at)} · Colombia</span>}
+                      {!carta.is_locked && (carta.unlock_at || carta.sent_at) && (
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>{fmt((carta.unlock_at || carta.sent_at)!)}</span>
                       )}
                       {carta.body && (
                         <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.22)' }} className="truncate">

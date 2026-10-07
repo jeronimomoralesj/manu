@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:cartas": "node --experimental-strip-types --test tests/cartas.test.ts",
+    "test:cartas:api": "node tests/cartas-api.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS cartas (
   body TEXT,
   image_base64 TEXT,
   sent_at TIMESTAMPTZ,
+  unlock_at TIMESTAMPTZ,
   is_read BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -136,3 +137,7 @@ ALTER TABLE map_locations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAUL
 
 -- Add created_at to music_library if missing
 ALTER TABLE music_library ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Scheduled letters (legacy rows remain open).
+ALTER TABLE cartas ADD COLUMN IF NOT EXISTS unlock_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS cartas_unlock_at_idx ON cartas (unlock_at);
