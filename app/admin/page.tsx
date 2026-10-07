@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Trash2, Plus, Database, Image as ImageIcon, Pencil, X, Check, MapPin, Archive, Music, HelpCircle, Star, RotateCcw, Gift, Mail } from 'lucide-react'
-import { Song, MoodMode, MapLocation, MemoryVault, TriviaQuestion, Carta } from '@/types'
+import { Song, MoodMode, MapLocation, MemoryVault, TriviaQuestion } from '@/types'
+import CartasAdmin from '@/components/CartasAdmin'
 import { extractTrackId } from '@/lib/spotify'
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -847,194 +848,6 @@ function TriviaTab() {
 
 // ─── CARTAS ───────────────────────────────────────────────────────────────────
 
-const EMPTY_CARTA = { title: '', body: '', sent_at: '', image_base64: '' }
-type CartaForm = typeof EMPTY_CARTA
-
-function CartasTab() {
-  const [cartas, setCartas]   = useState<Carta[]>([])
-  const [form, setForm]       = useState<CartaForm>(EMPTY_CARTA)
-  const [showForm, setShowForm] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg]         = useState('')
-  const imgRef                = useRef<HTMLInputElement>(null)
-  const formRef               = useRef<HTMLDivElement>(null)
-
-  async function load() {
-    const res  = await fetch('/api/cartas')
-    const data = await res.json()
-    setCartas(Array.isArray(data) ? data : [])
-  }
-  useEffect(() => { load() }, [])
-
-  function flash(text: string) { setMsg(text); setTimeout(() => setMsg(''), 3500) }
-
-  function handleImg(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const r = ev.target?.result as string
-      setForm(f => ({ ...f, image_base64: r.split(',')[1] }))
-    }
-    reader.readAsDataURL(file)
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true)
-    const res = await fetch('/api/cartas', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
-        title:        form.title,
-        body:         form.body         || null,
-        image_base64: form.image_base64 || null,
-        sent_at:      form.sent_at      || null,
-      }),
-    })
-    setLoading(false)
-    if (res.ok) { setForm(EMPTY_CARTA); setShowForm(false); flash('Carta enviada ✓'); load() }
-    else { const err = await res.json(); flash(`Error: ${err.error}`) }
-  }
-
-  async function handleDelete(id: string) {
-    if (!confirm('¿Eliminar esta carta?')) return
-    await fetch(`/api/cartas?id=${id}`, { method: 'DELETE' })
-    load()
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">{cartas.length} cartas guardadas</p>
-        <button
-          onClick={() => { setShowForm(s => !s); setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 50) }}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-white"
-          style={{ background: ACCENT }}
-        >
-          <Plus className="w-4 h-4" /> Nueva carta
-        </button>
-      </div>
-
-      <Flash msg={msg} />
-
-      {showForm && (
-        <div ref={formRef} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-          <h2 className="font-bold text-gray-800 mb-5 flex items-center gap-2">
-            <Mail className="w-4 h-4 text-[#FF5722]" /> Escribir una carta
-          </h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Título / Asunto</label>
-              {inp({ required: true, value: form.title, onChange: e => setForm(f => ({ ...f, title: e.target.value })), placeholder: 'Para cuando menos lo esperes…' })}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Fecha de envío</label>
-              {inp({ type: 'date', value: form.sent_at, onChange: e => setForm(f => ({ ...f, sent_at: e.target.value })) })}
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Mensaje digital</label>
-              <textarea
-                value={form.body}
-                onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
-                placeholder="Escribe aquí tu carta…"
-                rows={6}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#FF5722] transition-colors resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Foto de la carta escrita a mano</label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => imgRef.current?.click()}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-500 hover:border-[#FF5722] hover:text-[#FF5722] transition-colors"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                  {form.image_base64 ? 'Cambiar imagen' : 'Subir imagen'}
-                </button>
-                <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={handleImg} />
-                {form.image_base64 && (
-                  <div className="relative">
-                    <img
-                      src={`data:image/jpeg;base64,${form.image_base64}`}
-                      alt="preview"
-                      className="w-16 h-16 rounded-xl object-cover shadow"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, image_base64: '' }))}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs"
-                    >×</button>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold text-gray-500 border border-gray-200"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-                style={{ background: ACCENT }}
-              >
-                {loading ? 'Enviando…' : <><Mail className="w-4 h-4" /> Enviar carta</>}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-        <h2 className="font-bold text-gray-800 mb-4">Cartas ({cartas.length})</h2>
-        {cartas.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-8">Sin cartas. Escribe la primera.</p>
-        ) : (
-          <div className="space-y-2">
-            {cartas.map(carta => (
-              <div key={carta.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors">
-                <div
-                  className="w-10 h-10 rounded-xl flex-shrink-0 overflow-hidden flex items-center justify-center"
-                  style={{ background: carta.is_read ? '#f3f4f6' : '#FF572215' }}
-                >
-                  {carta.image_base64
-                    ? <img src={`data:image/jpeg;base64,${carta.image_base64}`} alt={carta.title} className="w-full h-full object-cover" />
-                    : <Mail className="w-4 h-4" style={{ color: carta.is_read ? '#9ca3af' : ACCENT }} />
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{carta.title}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {carta.sent_at && <p className="text-xs text-gray-400">{carta.sent_at}</p>}
-                    <span
-                      className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
-                      style={carta.is_read
-                        ? { background: '#f3f4f6', color: '#9ca3af' }
-                        : { background: '#fff7ed', color: ACCENT }}
-                    >
-                      {carta.is_read ? 'Leída' : 'Sin leer'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(carta.id)}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 
 const ADMIN_TABS = [
@@ -1082,7 +895,7 @@ export default function AdminPage() {
         {tab === 'places'   && <PlacesTab />}
         {tab === 'memories' && <MemoriesTab />}
         {tab === 'trivia'   && <TriviaTab />}
-        {tab === 'cartas'   && <CartasTab />}
+        {tab === 'cartas'   && <CartasAdmin />}
 
       </div>
     </div>
