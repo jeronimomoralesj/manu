@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test:cartas": "node --experimental-strip-types --test tests/cartas.test.ts",
-    "test:cartas:api": "node tests/cartas-api.mjs"
+    "test:cartas:api": "node tests/cartas-api.mjs",
+    "test:treasure": "node --experimental-strip-types --test tests/treasure.test.ts",
+    "test:treasure:api": "node tests/treasure-api.mjs",
+    "test:treasure:db": "bash tests/treasure-db.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

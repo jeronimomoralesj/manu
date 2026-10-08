@@ -2,7 +2,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Trash2, Plus, Database, Image as ImageIcon, Pencil, X, Check, MapPin, Archive, Music, HelpCircle, Star, RotateCcw, Gift, Mail } from 'lucide-react'
 import { Song, MoodMode, MapLocation, MemoryVault, TriviaQuestion } from '@/types'
-import CartasAdmin from '@/components/CartasAdmin'
+import CartasAdmin, { AdminAccess } from '@/components/CartasAdmin'
+import TreasureAdmin from '@/components/TreasureAdmin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { extractTrackId } from '@/lib/spotify'
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -608,7 +610,7 @@ function MemoriesTab() {
 const EMPTY_Q = { question: '', opt0: '', opt1: '', opt2: '', opt3: '', correct: '0', points_reward: '20' }
 type QForm = typeof EMPTY_Q
 
-function TriviaTab() {
+function TriviaTab({ client, userId }: { client: SupabaseClient; userId: string }) {
   const [questions, setQuestions] = useState<TriviaQuestion[]>([])
   const [pts, setPts] = useState(0)
   const [form, setForm] = useState<QForm>(EMPTY_Q)
@@ -620,17 +622,53 @@ function TriviaTab() {
   const [msg, setMsg] = useState('')
   const formRef = useRef<HTMLDivElement>(null)
 
-  async function load() {
-    const [triviaRes, gamiRes] = await Promise.all([
-      fetch('/api/trivia').then(r => r.json()),
-      fetch('/api/gamification').then(r => r.json()),
-    ])
-    setQuestions(triviaRes.questions ?? [])
-    setPts(gamiRes?.total_points ?? 0)
-  }
-  useEffect(() => { load() }, [])
+  const [error, setError] = useState('')
+  const [blocked, setBlocked] = useState(false)
+  const [fetching, setFetching] = useState(true)
+  const loadId = useRef(0)
+  const invalidateLoads = useCallback(() => { loadId.current++ }, [])
 
-  function flash(text: string) { setMsg(text); setTimeout(() => setMsg(''), 3500) }
+  const request = useCallback(async (path: string, init: RequestInit = {}) => {
+    const { data, error: authError } = await client.auth.getSession()
+    if (authError || !data.session || data.session.user.id !== userId || data.session.user.app_metadata.letters_admin !== true) {
+      setBlocked(true); setQuestions([])
+      throw new Error('Tu sesión venció o ya no tiene permiso. Cierra la sesión y vuelve a entrar con una cuenta autorizada.')
+    }
+    const headers = new Headers(init.headers)
+    headers.set('Authorization', `Bearer ${data.session.access_token}`)
+    if (init.body) headers.set('Content-Type', 'application/json')
+    const response = await fetch(path, { ...init, headers, cache: 'no-store' })
+    const result = await response.json().catch(() => null)
+    if (response.status === 401 || response.status === 403) {
+      setBlocked(true); setQuestions([])
+      throw new Error('No tienes una sesión válida para administrar la trivia. Cierra la sesión y vuelve a entrar.')
+    }
+    if (!response.ok) throw new Error(typeof result?.error === 'string' ? result.error : 'No pudimos completar la solicitud. Inténtalo de nuevo.')
+    return result
+  }, [client, userId])
+
+  const load = useCallback(async () => {
+    const id = ++loadId.current
+    setFetching(true)
+    try {
+      const [triviaRes, gamiRes] = await Promise.all([
+        request('/api/trivia?admin=1'),
+        request('/api/gamification'),
+      ])
+      if (!Array.isArray(triviaRes?.questions) || !Number.isFinite(gamiRes?.total_points)) throw new Error('No pudimos leer la trivia o los puntos. Inténtalo de nuevo.')
+      if (id === loadId.current) { setQuestions(triviaRes.questions); setPts(gamiRes.total_points) }
+    } catch (err) {
+      if (id === loadId.current) setError(err instanceof Error ? err.message : 'No pudimos cargar la trivia. Revisa tu conexión.')
+    } finally { if (id === loadId.current) setFetching(false) }
+  }, [request])
+
+  useEffect(() => {
+    let active = true
+    queueMicrotask(() => { if (active) void load() })
+    return () => { active = false; invalidateLoads() }
+  }, [load, invalidateLoads])
+
+  function flash(text: string) { setMsg(text) }
 
   function startAdd() {
     setEditingId(null); setForm(EMPTY_Q); setShowForm(true)
@@ -653,51 +691,74 @@ function TriviaTab() {
   function cancelForm() { setShowForm(false); setEditingId(null); setForm(EMPTY_Q) }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setLoading(true)
+    e.preventDefault()
+    setLoading(true); setError(''); setMsg('')
     const payload = {
       question: form.question,
       options: [form.opt0, form.opt1, form.opt2, form.opt3],
       correct_option_index: Number(form.correct),
       points_reward: Number(form.points_reward),
     }
-    let res: Response
-    if (editingId) {
-      res = await fetch('/api/trivia', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...payload, id: editingId }) })
-    } else {
-      res = await fetch('/api/trivia', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    }
-    setLoading(false)
-    if (res.ok) { cancelForm(); flash(editingId ? 'Pregunta actualizada ✓' : 'Pregunta añadida ✓'); load() }
-    else { const err = await res.json(); flash(`Error: ${err.error}`) }
+    try {
+      await request('/api/trivia', {
+        method: editingId ? 'PATCH' : 'POST',
+        body: JSON.stringify(editingId ? { ...payload, id: editingId } : payload),
+      })
+      flash(editingId ? 'Pregunta actualizada ✓' : 'Pregunta añadida ✓')
+      cancelForm()
+      await load()
+    } catch (err) { setError(err instanceof Error ? err.message : 'No pudimos guardar la pregunta.') }
+    finally { setLoading(false) }
   }
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta pregunta?')) return
-    await fetch(`/api/trivia?id=${id}`, { method: 'DELETE' })
-    if (editingId === id) cancelForm()
-    load(); flash('Pregunta eliminada')
+    setLoading(true); setError(''); setMsg('')
+    try {
+      await request(`/api/trivia?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (editingId === id) cancelForm()
+      flash('Pregunta eliminada')
+      await load()
+    } catch (err) { setError(err instanceof Error ? err.message : 'No pudimos eliminar la pregunta.') }
+    finally { setLoading(false) }
   }
 
   async function handleReset(id: string) {
-    await fetch('/api/trivia', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ _action: 'reset', id }) })
-    load(); flash('Pregunta restablecida')
+    setLoading(true); setError(''); setMsg('')
+    try {
+      await request('/api/trivia', { method: 'PATCH', body: JSON.stringify({ _action: 'reset', id }) })
+      flash('Pregunta restablecida. Los puntos ya concedidos no se vuelven a entregar.')
+      await load()
+    } catch (err) { setError(err instanceof Error ? err.message : 'No pudimos restablecer la pregunta.') }
+    finally { setLoading(false) }
   }
 
   async function handleAddPoints(e: React.FormEvent) {
     e.preventDefault()
     const n = Number(addPts)
-    if (!n) return
+    setError(''); setMsg('')
+    if (!Number.isSafeInteger(n) || n === 0) { setError('Escribe un número entero de puntos distinto de cero.'); return }
     setAddingPts(true)
-    await fetch('/api/gamification', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ points: n }) })
-    setAddPts(''); setAddingPts(false); load()
-    flash(`${n > 0 ? '+' : ''}${n} puntos aplicados ✓`)
+    try {
+      await request('/api/gamification', { method: 'POST', body: JSON.stringify({ points: n }) })
+      setAddPts('')
+      flash(`${n > 0 ? '+' : ''}${n} puntos aplicados ✓`)
+      await load()
+    } catch (err) { setError(err instanceof Error ? err.message : 'No pudimos aplicar los puntos.') }
+    finally { setAddingPts(false) }
   }
 
   const answered = questions.filter(q => q.is_answered).length
+  const busy = loading || addingPts || fetching
+
+  if (blocked) return <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error || 'Tu cuenta ya no tiene permiso para administrar la trivia.'}</p>
 
   return (
     <div className="space-y-6">
       <Flash msg={msg} />
+      {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+      {fetching && <p role="status" className="text-sm text-gray-500">Cargando trivia y puntos…</p>}
+      {error && !fetching && <button type="button" disabled={busy} onClick={() => { setError(''); void load() }} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-600 disabled:opacity-50">Volver a cargar</button>}
 
       {/* Points widget */}
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
@@ -722,7 +783,7 @@ function TriviaTab() {
             placeholder="Añadir o quitar puntos (ej: 50 o -20)"
             className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#FF5722] transition-colors"
           />
-          <button type="submit" disabled={addingPts || !addPts} className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-40" style={{ background: ACCENT }}>
+          <button type="submit" disabled={busy || !addPts} className="px-4 py-2 rounded-xl text-sm font-bold text-white disabled:opacity-40" style={{ background: ACCENT }}>
             {addingPts ? '...' : <Gift className="w-4 h-4" />}
           </button>
         </form>
@@ -731,7 +792,7 @@ function TriviaTab() {
       {/* Questions list header */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-400">{questions.length} pregunta{questions.length !== 1 ? 's' : ''} en la trivia</p>
-        <button onClick={startAdd} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: ACCENT }}>
+        <button onClick={startAdd} disabled={busy} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: ACCENT }}>
           <Plus className="w-4 h-4" /> Nueva pregunta
         </button>
       </div>
@@ -741,7 +802,7 @@ function TriviaTab() {
         <div ref={formRef} className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
           <h2 className="font-bold text-gray-800 mb-5 flex items-center gap-2">
             {editingId ? <><Pencil className="w-4 h-4 text-[#FF5722]" /> Editando pregunta</> : <><Plus className="w-4 h-4 text-[#FF5722]" /> Nueva pregunta</>}
-            <button onClick={cancelForm} className="ml-auto text-xs text-gray-400 hover:text-red-500 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Cancelar</button>
+            <button onClick={cancelForm} disabled={busy} className="ml-auto text-xs text-gray-400 hover:text-red-500 flex items-center gap-1"><X className="w-3.5 h-3.5" /> Cancelar</button>
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -791,7 +852,7 @@ function TriviaTab() {
                 {inp({ required: true, type: 'number', min: '1', value: form.points_reward, onChange: e => setForm(f => ({ ...f, points_reward: e.target.value })), placeholder: '20' })}
               </div>
             </div>
-            <button type="submit" disabled={loading} className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: ACCENT }}>
+            <button type="submit" disabled={busy} className="w-full py-3 rounded-xl text-white font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2" style={{ background: ACCENT }}>
               {loading ? 'Guardando...' : editingId ? <><Check className="w-4 h-4" /> Guardar cambios</> : <><Plus className="w-4 h-4" /> Añadir pregunta</>}
             </button>
           </form>
@@ -800,7 +861,8 @@ function TriviaTab() {
 
       {/* List */}
       <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100">
-        <h2 className="font-bold text-gray-800 mb-4">Preguntas ({questions.length})</h2>
+        <h2 className="font-bold text-gray-800 mb-2">Preguntas ({questions.length})</h2>
+        <p className="mb-4 text-xs leading-relaxed text-gray-500">Restablecer permite responder otra vez. El registro del servidor conserva las recompensas y evita volver a conceder puntos por la misma pregunta.</p>
         {questions.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">Sin preguntas. Añade la primera.</p>
         ) : (
@@ -829,12 +891,12 @@ function TriviaTab() {
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
                     {q.is_answered && (
-                      <button onClick={() => handleReset(q.id)} title="Restablecer" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-yellow-50 hover:text-yellow-500">
+                      <button onClick={() => handleReset(q.id)} disabled={busy} title="Restablecer sin volver a entregar puntos" aria-label="Restablecer pregunta sin volver a entregar puntos" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-yellow-50 hover:text-yellow-500">
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <button onClick={() => startEdit(q)} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-500"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(q.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => startEdit(q)} disabled={busy} aria-label="Editar pregunta" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-blue-50 hover:text-blue-500"><Pencil className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(q.id)} disabled={busy} aria-label="Eliminar pregunta" className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
               </div>
@@ -856,6 +918,7 @@ const ADMIN_TABS = [
   { id: 'memories', label: 'Recuerdos', icon: Archive },
   { id: 'trivia', label: 'Trivia', icon: HelpCircle },
   { id: 'cartas', label: 'Cartas', icon: Mail },
+  { id: 'treasure', label: 'Sorpresa', icon: Gift },
 ]
 
 export default function AdminPage() {
@@ -877,10 +940,13 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 p-1 rounded-2xl bg-white shadow-sm border border-gray-100">
+        <div className="flex gap-1 overflow-x-auto p-1 rounded-2xl bg-white shadow-sm border border-gray-100">
           {ADMIN_TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
+              aria-label={label}
+              aria-pressed={tab === id}
+              title={label}
               onClick={() => setTab(id)}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-sm font-semibold transition-all"
               style={tab === id ? { background: ACCENT, color: '#fff' } : { color: '#9ca3af' }}
@@ -894,8 +960,9 @@ export default function AdminPage() {
         {tab === 'songs'    && <SongsTab />}
         {tab === 'places'   && <PlacesTab />}
         {tab === 'memories' && <MemoriesTab />}
-        {tab === 'trivia'   && <TriviaTab />}
+        {tab === 'trivia'   && <AdminAccess>{(client, userId) => <TriviaTab client={client} userId={userId} />}</AdminAccess>}
         {tab === 'cartas'   && <CartasAdmin />}
+        {tab === 'treasure' && <AdminAccess>{(client, userId) => <TreasureAdmin client={client} userId={userId} />}</AdminAccess>}
 
       </div>
     </div>
