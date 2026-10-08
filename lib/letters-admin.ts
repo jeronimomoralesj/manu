@@ -11,5 +11,5 @@ export async function requireLettersAdmin(req: NextRequest) {
   if (error || !data.user) return { response: NextResponse.json({ error: 'Tu sesión venció. Vuelve a iniciar sesión.' }, { status: 401, headers: PRIVATE_HEADERS }) }
   // app_metadata is controlled by the server, unlike user_metadata.
   if (data.user.app_metadata?.letters_admin !== true) return { response: NextResponse.json({ error: 'Esta cuenta no tiene permiso para administrar cartas.' }, { status: 403, headers: PRIVATE_HEADERS }) }
-  return { db }
+  return { db, user: data.user }
 }
