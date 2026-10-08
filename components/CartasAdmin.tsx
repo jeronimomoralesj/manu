@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import { Check, Image as ImageIcon, LogOut, Mail, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { getBrowserClient } from '@/lib/supabase'
@@ -26,6 +26,10 @@ function ErrorMessage({ message }: { message: string }) {
 }
 
 export default function CartasAdmin() {
+  return <AdminAccess />
+}
+
+export function AdminAccess({ children }: { children?: (client: SupabaseClient, userId: string) => React.ReactNode }) {
   const [client, setClient] = useState<SupabaseClient | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [checking, setChecking] = useState(true)
@@ -33,6 +37,7 @@ export default function CartasAdmin() {
   const [error, setError] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const sharedAccess = Boolean(children)
 
   useEffect(() => {
     let active = true
@@ -58,11 +63,11 @@ export default function CartasAdmin() {
         })
       } catch {
         setChecking(false)
-        setError('Falta configurar el acceso seguro a las cartas. Revisa la configuración de Supabase.')
+        setError(sharedAccess ? 'Falta configurar el acceso seguro al panel. Revisa la configuración de Supabase.' : 'Falta configurar el acceso seguro a las cartas. Revisa la configuración de Supabase.')
       }
     })
     return () => { active = false; unsubscribe?.() }
-  }, [])
+  }, [sharedAccess])
 
   async function login(event: React.FormEvent) {
     event.preventDefault()
@@ -94,8 +99,8 @@ export default function CartasAdmin() {
       <ErrorMessage message={error} />
       {!session ? (
         <section className="bg-white rounded-3xl border border-gray-100 p-5 shadow-sm space-y-4">
-          <h2 className="font-bold text-gray-800">Acceso a las cartas</h2>
-          <p className="text-sm text-gray-500">Inicia sesión con una cuenta de administrador autorizada para crear y programar cartas. Si aún no tienes acceso, pídeselo a quien administra esta página.</p>
+          <h2 className="font-bold text-gray-800">{children ? 'Acceso privado' : 'Acceso a las cartas'}</h2>
+          <p className="text-sm text-gray-500">{children ? 'Inicia sesión con la misma cuenta de administrador autorizada para las cartas.' : 'Inicia sesión con una cuenta de administrador autorizada para crear y programar cartas. Si aún no tienes acceso, pídeselo a quien administra esta página.'}</p>
           <form onSubmit={login} className="space-y-4">
             <label className="block text-sm text-gray-600">Correo electrónico
               <input className={`${INPUT} mt-1`} type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} disabled={busy} />
@@ -113,8 +118,8 @@ export default function CartasAdmin() {
             <button onClick={logout} disabled={busy} className={`${BUTTON} border border-gray-200 text-gray-600 flex items-center gap-2`}><LogOut className="w-4 h-4" />{busy ? 'Cerrando…' : 'Cerrar sesión'}</button>
           </div>
           {session.user.app_metadata.letters_admin === true && client ? (
-            <AuthorizedLetters key={session.user.id} client={client} userId={session.user.id} />
-          ) : <ErrorMessage message="Esta cuenta no tiene permiso para administrar cartas. Usa una cuenta autorizada o pide acceso a quien administra esta página." />}
+            <Fragment key={session.user.id}>{children ? children(client, session.user.id) : <AuthorizedLetters client={client} userId={session.user.id} />}</Fragment>
+          ) : <ErrorMessage message={children ? 'Esta cuenta no tiene permiso para administrar este contenido. Usa una cuenta autorizada para las cartas.' : 'Esta cuenta no tiene permiso para administrar cartas. Usa una cuenta autorizada o pide acceso a quien administra esta página.'} />}
         </>
       )}
     </div>
