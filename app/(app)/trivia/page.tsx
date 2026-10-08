@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { HelpCircle, Check, X, Star, Ticket } from 'lucide-react'
-import { TriviaQuestion, SecretDate, Gamification } from '@/types'
+import { useState, useEffect, useRef } from 'react'
+import { Check, X, Star, Ticket } from 'lucide-react'
+import { TriviaQuestion as AdminTriviaQuestion, SecretDate, Gamification } from '@/types'
+type TriviaQuestion = Omit<AdminTriviaQuestion, 'correct_option_index'>
 
 const ACCENT = '#FF5722'
 
@@ -23,12 +24,13 @@ export default function TriviaPage() {
   const [questions, setQuestions] = useState<TriviaQuestion[]>([])
   const [secretDates, setSecretDates] = useState<SecretDate[]>([])
   const [gami, setGami] = useState<Gamification | null>(null)
-  const [current, setCurrent] = useState(0)
+  const answerBusy = useRef(false)
+  const [error, setError] = useState('')
   const [selected, setSelected] = useState<number | null>(null)
-  const [result, setResult] = useState<{ correct: boolean; points: number } | null>(null)
-  const [seeding, setSeeding] = useState(false)
+  const [result, setResult] = useState<{ correct: boolean; points: number; correctIndex: number; question: TriviaQuestion; repeated: boolean } | null>(null)
 
   async function load() {
+    try {
     const [triviaRes, gamiRes] = await Promise.all([
       fetch('/api/trivia').then(r => r.json()),
       fetch('/api/gamification').then(r => r.json()),
@@ -36,40 +38,39 @@ export default function TriviaPage() {
     setQuestions(triviaRes.questions ?? [])
     setSecretDates(triviaRes.secretDates ?? [])
     setGami(gamiRes)
+    } catch { setError('No pudimos cargar la trivia. Recarga para intentarlo de nuevo.') }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { let active = true; queueMicrotask(() => { if (active) void load() }); return () => { active = false } }, [])
 
   async function handleAnswer(idx: number) {
-    if (selected !== null || result !== null) return
-    setSelected(idx)
-    const q = unanswered[current]
-    const res = await fetch('/api/trivia', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ _action: 'answer', questionId: q.id, selectedIndex: idx }),
-    })
-    const data = await res.json()
-    setResult({ correct: data.correct, points: data.points_earned })
-    load()
+    if (answerBusy.current || selected !== null || result !== null) return
+    const question = unanswered[0]
+    if (!question) return
+    answerBusy.current = true
+    setSelected(idx); setError('')
+    try {
+      const res = await fetch('/api/trivia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _action: 'answer', questionId: question.id, selectedIndex: idx }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'No pudimos guardar tu respuesta.')
+      setResult({ correct: data.correct === true, points: data.points_earned, correctIndex: data.correct_option_index, question, repeated: data.already_answered === true })
+      setQuestions(previous => previous.map(item => item.id === question.id ? { ...item, is_answered: true } : item))
+      window.dispatchEvent(new Event('treasure:refresh'))
+      void load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Revisa tu conexión e inténtalo de nuevo.')
+      setSelected(null)
+    } finally { answerBusy.current = false }
   }
 
-  function next() { setSelected(null); setResult(null); setCurrent(c => c + 1) }
-
-  async function handleSeed() {
-    setSeeding(true)
-    await fetch('/api/trivia', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ _action: 'seed' }),
-    })
-    setSeeding(false)
-    load()
-  }
+  function next() { setSelected(null); setResult(null) }
 
   const unanswered = questions.filter(q => !q.is_answered)
   const answered   = questions.filter(q => q.is_answered)
-  const q          = unanswered[current] ?? null
+  const q          = result?.question ?? unanswered[0] ?? null
   const pts        = gami?.total_points ?? 0
 
   return (
@@ -99,18 +100,11 @@ export default function TriviaPage() {
               <Star style={{ width: 14, height: 14, color: ACCENT, fill: ACCENT }} />
               <span style={{ fontWeight: 700, fontSize: 15, color: ACCENT }}>{pts}</span>
             </div>
-            {questions.length === 0 && (
-              <button
-                onClick={handleSeed}
-                disabled={seeding}
-                className="px-3.5 py-2 rounded-2xl text-xs font-semibold disabled:opacity-50 transition-all active:scale-95"
-                style={GLASS_DARK}
-              >
-                <span style={{ color: 'rgba(255,255,255,0.6)' }}>{seeding ? '...' : 'Seed'}</span>
-              </button>
-            )}
+
           </div>
         </div>
+
+        {error && <p role="alert" className="rounded-2xl p-3 text-sm text-red-300 bg-red-950/30">{error}</p>}
 
         {/* Progress */}
         {questions.length > 0 && (
@@ -143,7 +137,7 @@ export default function TriviaPage() {
                 className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
                 style={{ background: `${ACCENT}20`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)' }}
               >
-                <span style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>{current + 1}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: ACCENT }}>{answered.length + (result ? 0 : 1)}</span>
               </div>
               <p style={{ fontSize: 17, fontWeight: 700, color: '#ffffff', lineHeight: 1.45, paddingTop: 6 }}>{q.question}</p>
             </div>
@@ -151,7 +145,7 @@ export default function TriviaPage() {
             <div className="space-y-2.5 relative">
               {q.options.map((opt, i) => {
                 const isSelected = selected === i
-                const isCorrect  = result && i === q.correct_option_index
+                const isCorrect  = result && i === result.correctIndex
                 const isWrong    = result && isSelected && !result.correct
 
                 let bg     = 'rgba(255,255,255,0.06)'
@@ -198,16 +192,16 @@ export default function TriviaPage() {
                     {result.correct ? '¡Correcto! 🎉' : 'No era esa 💙'}
                   </p>
                   <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                    {result.correct ? `+${result.points} puntos ganados` : 'La correcta está resaltada'}
+                    {result.repeated ? 'Esta respuesta ya estaba guardada' : result.correct ? `+${result.points} puntos ganados` : 'La correcta está resaltada'}
                   </p>
                 </div>
-                {current < unanswered.length - 1 && (
+                {(
                   <button
                     onClick={next}
                     className="px-4 py-2 rounded-xl font-bold transition-all active:scale-95"
                     style={{ background: ACCENT, color: '#fff', fontSize: 13 }}
                   >
-                    Siguiente →
+                    {unanswered.length ? 'Siguiente →' : 'Ver resultado →'}
                   </button>
                 )}
               </div>
