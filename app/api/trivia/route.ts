@@ -1,40 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerClient } from '@/lib/supabase'
+import { requireLettersAdmin } from '@/lib/letters-admin'
+import { parseQuestion } from '@/lib/treasure'
+import { mutationOriginError, rpcError, treasureJson } from '@/lib/treasure-server'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const admin = req.nextUrl.searchParams.get('admin') === '1'
+  if (admin) {
+    const auth = await requireLettersAdmin(req)
+    if (auth.response) return auth.response
+  }
   const db = getServerClient()
   const [questionsRes, datesRes] = await Promise.all([
-    db.from('trivia_questions').select('*').order('created_at', { ascending: true }),
+    db.from('trivia_questions').select(admin ? '*' : 'id,question,options,points_reward,is_answered,created_at').order('created_at', { ascending: true }),
     db.from('secret_dates').select('*').order('required_score'),
   ])
-  return NextResponse.json({
-    questions: questionsRes.data ?? [],
-    secretDates: datesRes.data ?? [],
-  })
+  if (questionsRes.error || datesRes.error) return treasureJson({ error: 'No pudimos cargar la trivia.' }, 503)
+  return treasureJson({ questions: questionsRes.data ?? [], secretDates: datesRes.data ?? [] })
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  const denied = mutationOriginError(req)
+  if (denied) return denied
+  let body
+  try { body = await req.json(); if (!body || typeof body !== 'object') throw new Error() }
+  catch { return treasureJson({ error: 'Solicitud inválida.' }, 400) }
   const db = getServerClient()
 
   if (body._action === 'answer') {
-    const { questionId, selectedIndex } = body
-    const { data: q } = await db.from('trivia_questions').select('*').eq('id', questionId).single()
-    if (!q) return NextResponse.json({ error: 'Question not found' }, { status: 404 })
-    if (q.is_answered) return NextResponse.json({ error: 'Already answered' }, { status: 400 })
-
-    const correct = selectedIndex === q.correct_option_index
-    await db.from('trivia_questions').update({ is_answered: true }).eq('id', questionId)
-
-    if (correct) {
-      const { data: gami } = await db.from('user_gamification').select('total_points').eq('id', 1).maybeSingle()
-      const newPts = (gami?.total_points ?? 0) + q.points_reward
-      const newLevel = Math.floor(newPts / 100) + 1
-      await db.from('user_gamification').upsert({ id: 1, total_points: newPts, unlocked_level: newLevel })
-    }
-
-    return NextResponse.json({ correct, points_earned: correct ? q.points_reward : 0 })
+    if (typeof body.questionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(body.questionId) || !Number.isInteger(body.selectedIndex)) return treasureJson({ error: 'Respuesta inválida.' }, 400)
+    const { data, error } = await db.rpc('treasure_answer', { p_question_id: body.questionId, p_selected_index: body.selectedIndex })
+    if (error) return rpcError(error)
+    return treasureJson(data)
   }
+
+  const auth = await requireLettersAdmin(req)
+  if (auth.response) return auth.response
 
   if (body._action === 'seed') {
     const questions = [
@@ -56,24 +57,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // Create a new question
-  const { data, error } = await db
-    .from('trivia_questions')
-    .insert([{
-      question: body.question,
-      options: body.options,
-      correct_option_index: Number(body.correct_option_index),
-      points_reward: Number(body.points_reward) || 20,
-      is_answered: false,
-    }])
-    .select()
-    .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data, { status: 201 })
+  let fields
+  try { fields = parseQuestion(body) }
+  catch (error) { return treasureJson({ error: error instanceof Error ? error.message : 'Pregunta inválida.' }, 400) }
+  const { data, error } = await db.from('trivia_questions').insert([{ ...fields, is_answered: false }]).select().single()
+  if (error) return treasureJson({ error: 'No pudimos guardar la pregunta.' }, 503)
+  return treasureJson(data, 201)
 }
 
 export async function PATCH(req: NextRequest) {
-  const body = await req.json()
+  const auth = await requireLettersAdmin(req)
+  if (auth.response) return auth.response
+  let body
+  try { body = await req.json(); if (!body || typeof body !== 'object') throw new Error() }
+  catch { return treasureJson({ error: 'Solicitud inválida.' }, 400) }
   const db = getServerClient()
 
   if (body._action === 'reset') {
@@ -87,22 +84,17 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json(data)
   }
 
-  const { data, error } = await db
-    .from('trivia_questions')
-    .update({
-      question: body.question,
-      options: body.options,
-      correct_option_index: Number(body.correct_option_index),
-      points_reward: Number(body.points_reward),
-    })
-    .eq('id', body.id)
-    .select()
-    .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  let fields
+  try { fields = parseQuestion(body) }
+  catch (error) { return treasureJson({ error: error instanceof Error ? error.message : 'Pregunta inválida.' }, 400) }
+  const { data, error } = await db.from('trivia_questions').update(fields).eq('id', body.id).select().single()
+  if (error) return treasureJson({ error: 'No pudimos guardar la pregunta.' }, 503)
+  return treasureJson(data)
 }
 
 export async function DELETE(req: NextRequest) {
+  const auth = await requireLettersAdmin(req)
+  if (auth.response) return auth.response
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
